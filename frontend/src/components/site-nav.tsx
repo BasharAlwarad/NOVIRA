@@ -1,6 +1,5 @@
 const navLinks = [
   { label: 'Services', href: '#services' },
-  { label: 'Users', href: '#users' },
   { label: 'Contact', href: '#contact' },
 ];
 
