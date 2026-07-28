@@ -1,4 +1,5 @@
 const navLinks = [
+  { label: 'Assessment', href: '#assessment' },
   { label: 'Services', href: '#services' },
   { label: 'Contact', href: '#contact' },
 ];
@@ -34,10 +35,10 @@ export function SiteNav() {
         </nav>
 
         <a
-          href="#contact"
+          href="#assessment"
           className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
-          Talk to NOVIRA
+          Start questionnaire
         </a>
       </div>
     </header>
