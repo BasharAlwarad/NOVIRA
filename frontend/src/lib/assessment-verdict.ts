@@ -6,7 +6,6 @@ import {
   GermanyConnection,
   LanguageCertificateStatus,
   LanguageLevel,
-  PassportStatus,
   WorkExperience,
   type AssessmentAnswers,
 } from '@/types/assessment';
@@ -130,10 +129,6 @@ function hasAnyCertifiedLanguage(
   return status != null && status !== LanguageCertificateStatus.None;
 }
 
-function hasValidPassport(status: PassportStatus | null): boolean {
-  return status === PassportStatus.Yes;
-}
-
 function hasGermanyConnection(connections: GermanyConnection[]): boolean {
   return connections.some((connection) => connection !== GermanyConnection.None);
 }
@@ -152,7 +147,10 @@ function ageBand(age: string | null): AgeBand {
 
 function scoreUniversity(answers: AssessmentAnswers): PathScore {
   let points = 0;
-  const maxPoints = 3 + 4 + 1 + 2 + 1 + 1; // 12
+  // Passport status is deliberately excluded from scoring: getting one issued
+  // is a solvable administrative step, not a fit gap, and penalizing an
+  // otherwise-strong profile for it would be misleading. See Matching-Algorithm-Study.md.
+  const maxPoints = 3 + 4 + 1 + 2 + 1; // 11
 
   switch (answers.highestEducation) {
     case EducationLevel.TechnicalDiploma:
@@ -189,10 +187,6 @@ function scoreUniversity(answers: AssessmentAnswers): PathScore {
       break; // Less than €5,000
   }
 
-  if (hasValidPassport(answers.passportStatus)) {
-    points += 1;
-  }
-
   if (hasGermanyConnection(answers.germanyConnection)) {
     points += 1;
   }
@@ -204,7 +198,7 @@ function scoreUniversity(answers: AssessmentAnswers): PathScore {
 
 function scoreAusbildung(answers: AssessmentAnswers): PathScore {
   let points = 0;
-  const maxPoints = 3 + 4 + 1 + 3 + 2 + 1; // 14
+  const maxPoints = 3 + 4 + 1 + 3 + 2; // 13
 
   // Ausbildung is indifferent to academic level, unlike University.
   switch (answers.highestEducation) {
@@ -256,10 +250,6 @@ function scoreAusbildung(answers: AssessmentAnswers): PathScore {
       break; // None
   }
 
-  if (hasValidPassport(answers.passportStatus)) {
-    points += 1;
-  }
-
   return buildScore(DesiredPath.Ausbildung, points, maxPoints);
 }
 
@@ -278,7 +268,7 @@ function occupationDemandPoints(answers: AssessmentAnswers): number {
 
 function scoreEmployment(answers: AssessmentAnswers): PathScore {
   let points = 0;
-  const maxPoints = 3 + 3 + 4 + 7 + 3 + 1 + 1; // 22
+  const maxPoints = 3 + 3 + 4 + 7 + 3 + 1; // 21
 
   switch (answers.highestEducation) {
     case EducationLevel.Bachelors:
@@ -333,10 +323,6 @@ function scoreEmployment(answers: AssessmentAnswers): PathScore {
   }
 
   if (hasGermanyConnection(answers.germanyConnection)) {
-    points += 1;
-  }
-
-  if (hasValidPassport(answers.passportStatus)) {
     points += 1;
   }
 

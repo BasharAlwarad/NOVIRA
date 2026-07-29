@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { PathFitChart } from '@/components/assessment/PathFitChart';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import {
@@ -17,6 +18,19 @@ const PATH_LABELS: Record<EvaluablePath, string> = {
   [DesiredPath.Ausbildung]: 'an Ausbildung (vocational training)',
   [DesiredPath.Employment]: 'direct employment',
 };
+
+function getHighlightedPath(verdict: VerdictOutcome): EvaluablePath | null {
+  switch (verdict.kind) {
+    case 'confirmed':
+      return verdict.path;
+    case 'suggested':
+    case 'alternative':
+      return verdict.suggestedPath;
+    case 'unclear':
+    default:
+      return null;
+  }
+}
 
 function describeVerdict(verdict: VerdictOutcome): {
   heading: string;
@@ -95,6 +109,7 @@ export default function AssessmentResultPage() {
 
   const verdict = computeVerdict(answers);
   const { heading, body } = describeVerdict(verdict);
+  const highlightedPath = getHighlightedPath(verdict);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -108,6 +123,24 @@ export default function AssessmentResultPage() {
             {heading}
           </h1>
           <p className="mt-4 text-base leading-7 text-slate-600">{body}</p>
+
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <p className="mb-4 text-sm font-semibold text-slate-900">
+              How you compare across paths
+            </p>
+            <PathFitChart
+              scores={verdict.scores}
+              highlightedPath={highlightedPath}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-4xl border border-dashed border-slate-300 bg-white/60 p-6 text-center">
+          <p className="text-sm text-slate-500">
+            We&apos;re building your personalized shortlist of matching
+            Ausbildung and university options — this is where it&apos;ll
+            appear.
+          </p>
         </div>
       </section>
       <SiteFooter />

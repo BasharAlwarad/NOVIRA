@@ -49,7 +49,7 @@ The three pathways NOVIRA covers — university study, Ausbildung, and direct em
 
 ## 3. Cross-cutting factors (apply to every path)
 
-- **Passport validity is a universal practical prerequisite** — "No" or "Expired" doesn't invalidate a path, but it's a concrete, near-term blocker worth surfacing regardless of how strong everything else looks. This is factual/practical, not legal advice.
+- **Passport validity is collected but deliberately excluded from scoring** (revised after initial build — see §6). Getting a passport issued or renewed is a solvable administrative step, not a fit gap, and users exploring the app for information/education purposes shouldn't be scored down for a temporary status they can resolve. `passportStatus` stays in the assessment for Tier 2/future use, but none of the three path-scoring functions reference it.
 - **A certified language exam result is a confidence multiplier, not a separate gate** — someone who self-rates B1 *and* holds a Goethe/telc/TestDaF certificate is a more reliable "B1" than someone who only self-rates it.
 - **Germany connection, timeline, and region flexibility are modifiers, not primary drivers** — they're useful color for the human-reviewed explanation in Tier 2, and reasonable tie-breakers on borderline cases, but none of them should single-handedly turn a genuinely weak profile into a "strong fit," or a strong one into a weak one.
 
@@ -61,11 +61,11 @@ The three pathways NOVIRA covers — university study, Ausbildung, and direct em
 |---|---|
 | `country`, `age` | Baseline demographics; `age` feeds the Ausbildung age band and the Opportunity Card–style age band for Employment |
 | `highestEducation` | University-path gate (§2.1), Ausbildung is largely indifferent to this, Employment-path weight |
-| `occupationField` | Mainly Ausbildung/Employment fit — *not yet tagged* against which of our 110 fields are actual shortage occupations (§2.3); worth adding as metadata before scoring Employment fit seriously |
+| `occupationField` | Mainly Employment fit — tagged against shortage-occupation status via `occupation-demand.ts` (§2.3, §6) |
 | `workExperience` | Employment-path weight (heavy), Ausbildung (light), University (near-irrelevant) |
 | `desiredPath` | The path the algorithm should evaluate *first* and compare against (see §5) |
 | `germanLevel`, `englishLevel`, `languageCertificate` | Gates/weights across all three paths, per the real bands in §2 |
-| `passportStatus` | Universal practical flag (§3) |
+| `passportStatus` | Collected, **not scored** (§3, §6) — practical prerequisite, not a fit signal |
 | `germanyConnection` | Minor bonus modifier across all paths |
 | `financialSituation` | Heavy weight for University (blocked account), light for Ausbildung (paid training), moderate for Employment *only if* pursuing the job-seeker route without a pre-arranged offer |
 | `startTimeline`, `regionFlexibility` | Explanatory color, not scoring drivers |
@@ -88,29 +88,31 @@ This keeps the three-outcome structure Plan.md already committed to, but makes i
 
 ### 5.2 Draft internal weights (illustrative — thresholds are placeholders, not final)
 
-**University:**
+**University** (max 11 points):
 - `highestEducation`: High School = 0, Technical Diploma = 1, Bachelor/Master/Doctorate = 3 (already past the Studienkolleg hurdle)
 - Language: take the *better* of German-derived points (None/A1=0, A2=1, B1=2, B2=3, C1/C1+=4) or English-derived points (Beginner=0, Intermediate=1, Advanced=2, Fluent=3) — either can lead to a valid track
 - Certified language exam: +1
 - `financialSituation`: <€5,000=0, €5,000–12,000=1, >€12,000=2, Unsure=1
-- `passportStatus` valid: +1
-- `germanyConnection` (any selected): +1
+- `germanyConnection` (any real tie selected): +1
+- `passportStatus`: **not scored** — see §3/§6
 
-**Ausbildung:**
+**Ausbildung** (max 13 points):
 - `highestEducation`: any level = 2–3 (indifferent, unlike University)
 - `germanLevel`: None/A1=0, A2=1, B1=3, B2/C1+=4
 - Certified German exam: +1
 - `age`: 18–30=3, 31–40=2, 40+=1, under-18=1
 - `workExperience`: None=0, <2yr=1, 2yr+=2
-- `financialSituation`: minimal weight (training is paid)
+- `financialSituation`: minimal weight (training is paid) — not currently scored at all
+- `passportStatus`: **not scored** — see §3/§6
 
-**Employment:**
+**Employment** (max 21 points):
 - `highestEducation`: Bachelor+=3, Technical Diploma=2, High School=1
-- `occupationField`: bonus if tagged as a shortage occupation (tagging not yet done, see §4)
+- `occupationField`: bonus if tagged as a shortage occupation (`occupation-demand.ts`, done — see §6)
 - `workExperience`: None=0, <2yr=1, 2–5yr=3, 5+=4 (heaviest weight of any path)
-- Language: both German and English contribute, English weighted higher for IT/engineering-coded fields
+- Language: both German and English contribute equally — deliberately *not* weighting English higher for IT/engineering-coded fields yet, a known MVP simplification
 - `age`: ≤35=strong, 35–40=medium, 40+=lower (mirrors Opportunity Card bands, not a hard cutoff)
 - `germanyConnection`: +1
+- `passportStatus`: **not scored** — see §3/§6
 
 ### 5.3 What stays purely qualitative
 
@@ -125,6 +127,7 @@ Whatever the internal numbers land on, the **only** things that ever reach the u
 2. **"Do you already have a job offer/employer contact?" question — rejected.** Correct product logic: by definition, someone who already has a job offer wouldn't be using the app in the first place. Not adding this question; the Employment-path scoring doesn't attempt to distinguish the Blue Card (has an offer) from Opportunity Card (job-seeker) routes.
 3. **Shortage-occupation tagging — done, but *not* in the questionnaire.** Implemented as a separate internal-only lookup (`frontend/src/lib/occupation-demand.ts`), invisible to the user and not part of `types/assessment.ts`. This is deliberately a static, manually-curated snapshot for the MVP — the plan is to eventually replace it with an AI-assisted pipeline that checks official sources on a rolling basis and regenerates the data, and to surface any user-facing "high demand" indication elsewhere in the app (not the intake form) once that system exists. Not scoped yet.
 4. **Threshold values** — picked concrete numbers (per-path point totals, normalized to the 70%/40% ratio bands above) and validated them against seven synthetic profiles spanning all four outcome kinds (confirmed / alternative / suggested / unclear). All behaved sensibly — see git history for the specific test cases and outputs.
+5. **Passport status removed from scoring entirely.** Originally worth +1 point per path; removed after feedback that some users are exploring the app for education/information purposes and don't yet have a valid passport, and that getting one issued is a solvable administrative step, not a genuine fit gap — scoring it risked discouraging otherwise-strong, optimistic profiles over something easily fixed. `passportStatus` is still collected (useful for Tier 2/practical guidance) but no longer read by any of the three scoring functions. Verified: an identical profile scores identically regardless of passport status.
 
 **Still open — found during testing, not yet fixed:**
 5. **Ausbildung scoring doesn't penalize overqualification.** A synthetic profile of a senior software engineer (Bachelor's, 5+ years' experience, B2 German) scored "strong" for Ausbildung as well as the correct "confirmed" Employment result — in reality, someone that experienced would rarely want to restart as an entry-level apprentice. Didn't affect that specific test's final output (Employment was still correctly confirmed), but it would matter for someone with that profile who stated "Ausbildung" outright or selected "Unsure." Candidate fix: a downward adjustment to the Ausbildung score when both `highestEducation` and `workExperience` are high, rather than the current flat treatment. Not urgent for MVP — noted per the same "tune once we have real data" philosophy as the rest of §5.2.

@@ -42,6 +42,9 @@ npm run lint     # eslint (flat config: eslint-config-next core-web-vitals + typ
 ```
 No test runner is configured yet.
 
+### Browser verification (not a test suite)
+`playwright` and `tsx` are devDependencies specifically for ad-hoc visual/behavioral verification after a UI change — not a formal E2E suite (none exists). Write a throwaway script into `frontend/verify/` (gitignored, never committed), run it with `node verify/whatever.mjs` (or `npx tsx` for scripts that import TS source directly, e.g. to sanity-check `lib/` logic against sample data), and **delete the script and any screenshots when done** — the folder should be empty between sessions. Plain `import { chromium } from 'playwright'` resolves normally now; no npx cache tricks needed.
+
 ### Backend (run from `backend/`)
 ```
 dotnet run                     # start API at http://localhost:5080 (see Properties/launchSettings.json)
