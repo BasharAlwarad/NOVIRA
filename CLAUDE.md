@@ -4,20 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-NOVIRA is a two-part app that helps people from the Middle East/North Africa region find the best pathway (university, Ausbildung, or employment) to Germany. Users complete a multi-step assessment (country, age, education, desired path, language levels, passport status, budget); the plan is to have the backend turn those answers into a recommendation.
+NOVIRA is a two-part app that helps people from the Middle East/North Africa region find the best pathway (university, Ausbildung, or employment) to Germany. Users complete a 14-step assessment (country, age, education, occupation field, work experience, desired path, language levels + certification, passport status, prior Germany connection, financial situation, timeline, region flexibility) modeled on real German labor-market demand and Egypt-specific factors, not just generic profile fields. The Tier 1 verdict is computed entirely client-side by a rules engine (`frontend/src/lib/assessment-verdict.ts`, see "Matching algorithm" below) — the backend is not involved in this step at all.
 
 - `frontend/` — Next.js 16 (App Router) + React 19 + TypeScript + Tailwind v4 + DaisyUI. Owns the entire UI, including the assessment wizard, and currently persists assessment answers to `localStorage` only.
 - `backend/` — ASP.NET Core (.NET 9) minimal API with EF Core + Npgsql wired to a Postgres database (Neon). Has a `User` model and `AppDbContext` but no assessment/matching endpoints yet — just the health-check route (`GET /`) plus the `Users` table. `frontend/.env.example` documents `API_BASE_URL=http://localhost:5080` for the eventual connection between the two, but no frontend code calls it yet (`src/lib/api/` and `src/lib/contracts/` are empty scaffolding for this).
 
 The two apps are run and deployed independently — there is no shared package/workspace tooling tying them together.
 
-**Full business/legal/product reasoning** (legal scope constraints, the two-tier user funnel, why the Tier 1 verdict is a rules engine and not an LLM call, why the UI is English-first for now) lives in `Plan.md`, not here — read it before adding features that touch matching logic, user data collection, or anything advice/eligibility-adjacent. This file only tracks the short technical version: what phase we're building right now.
+**Full business/legal/product reasoning** (legal scope constraints, the two-tier user funnel, why the Tier 1 verdict is a rules engine and not an LLM call, why the UI is English-first for now) lives in `Plan.md`, not here — read it before adding features that touch matching logic, user data collection, or anything advice/eligibility-adjacent. **The matching algorithm's own research and design** (real German university/Ausbildung/employment criteria, the draft scoring weights, open tuning questions) lives in `Matching-Algorithm-Study.md` — read it before changing anything in `lib/assessment-verdict.ts` or `lib/occupation-demand.ts`. This file only tracks the short technical version: what phase we're building right now.
 
 ## Current build phase
 
 **Active — Phase 1: Tier 1 funnel (no signup, no documents; everything stays in `localStorage` until the email-capture step).**
-- [ ] Rules-engine verdict: a client-side pure function over the saved `AssessmentAnswers` — no backend call, no LLM. Three outcomes only (strong fit / consider job search / unclear, needs a closer look), never a numeric match score. Decision thresholds must come from the founder's actual professional judgment — confirm before implementing, don't invent them.
-- [ ] Visual, qualitative result screen presenting that verdict (profile-summary style, not a percentage/score).
+- [x] Rules-engine verdict: a client-side pure function over the saved `AssessmentAnswers` — no backend call, no LLM. See "Matching algorithm" below. Weights are approved-for-now per `Matching-Algorithm-Study.md` §6, expected to be tuned once real submissions come in — a known limitation (Ausbildung scoring doesn't yet penalize overqualification) is tracked there, not fixed yet.
+- [ ] Visual, qualitative result screen presenting that verdict (profile-summary style, not a percentage/score) — `computeVerdict()` exists and is tested, but nothing in the UI calls it yet.
 - [ ] Email-only capture (no password, no full account) gating a "full explanation sent by email" — this is the first point real data leaves the browser.
 - [ ] Short, plain-language privacy notice next to that email field once it exists.
 - [ ] `Users` row created in Neon only after an email is actually captured.
@@ -56,11 +56,24 @@ No test project exists yet.
 The wizard's data model, state, validation, and rendering are split across four layers — when changing a question, all of them may need updates:
 
 1. **Schema** — `src/types/assessment.ts` defines the canonical question/step schema (`ASSESSMENT_QUESTION_DEFINITIONS`, `ASSESSMENT_STEP_DEFINITIONS`), enums (e.g. `EducationLevel`, `DesiredPath`, `LanguageLevel`), and the `AssessmentState`/`AssessmentAnswers` shape.
-2. **State** — `src/context/AssessmentProvider.tsx` is a reducer-based React context (hydrate/update-answer/go-to-step/reset) providing the current step, answers, and navigation actions. Consumed via the `useAssessment()` hook (`src/hooks/useAssessment.ts`); must be used inside `<AssessmentProvider>` (wired in `src/app/page.tsx`).
+2. **State** — `src/context/AssessmentProvider.tsx` is a reducer-based React context (hydrate/update-answer/go-to-step/reset) providing the current step, answers, and navigation actions. Consumed via the `useAssessment()` hook (`src/hooks/useAssessment.ts`); must be used inside `<AssessmentProvider>` (wired in `src/app/assessment/page.tsx`, its own route — not embedded on the homepage, to keep the marketing page from competing with a 14-step form for attention).
 3. **Persistence** — `src/lib/assessment-storage.ts` saves/loads a versioned envelope (`ASSESSMENT_STORAGE_VERSION`) to `localStorage` under `ASSESSMENT_STORAGE_KEY`, with normalization for legacy shapes (e.g. migrating an old `education` field to `highestEducation`). Bump the version and extend `normalizeAssessmentState` when the answer shape changes.
 4. **Validation** — `src/lib/assessment-validation.ts` validates per-question (`validateQuestionAnswer`, dispatched by `question.kind`) and per-step (`validateStep`), driven off the same `ASSESSMENT_QUESTION_DEFINITIONS`.
 
 `AssessmentWizard.tsx` derives its per-question render config (`WIZARD_QUESTIONS`) directly from `ASSESSMENT_STEP_DEFINITIONS`/`ASSESSMENT_QUESTION_DEFINITIONS` at module scope — there is no second copy of question text/options to keep in sync. Adding or editing a question only requires changing `types/assessment.ts` (each question needs a `prompt`, the full question text shown to the user, in addition to its short `label`).
+
+Two question-rendering variants beyond the plain option-card grid, both driven by flags on the question definition (`AssessmentStep.tsx` branches on them):
+- **`searchable: true`** — renders `SearchableSelect.tsx` instead of a card grid: an always-visible, in-flow filterable list (not a floating overlay — that caused a stacking-context bug with the nav buttons, see git history) with category group-headers shown once per group, not repeated per row. Used for `occupationField` (110 options across 17 categories).
+- **`multiSelect: true`** — `AssessmentStep.tsx` toggles values in/out of an array instead of overwriting, uses `role="group"` instead of `radiogroup`. The answer type for that field must be an array (e.g. `germanyConnection: GermanyConnection[]`), and `AssessmentWizard.tsx`'s `answeredCount` must treat an empty array as unanswered, not answered — both already handled, but a trap if a new multi-select field is added without checking.
+
+`StepIndicator.tsx` is a horizontally-scrolling carousel (not a wrapping grid) that re-centers on the active step via `scrollIntoView` whenever `currentStepIndex` changes — it does not have its own prev/next controls, it only follows the wizard's own navigation.
+
+The assessment lives at its own route, `frontend/src/app/assessment/page.tsx` — not embedded on the homepage — specifically so a 14-question form doesn't compete with marketing/trust content for attention.
+
+### Matching algorithm
+- `frontend/src/lib/assessment-verdict.ts` — `computeVerdict(answers)` is the Tier 1 rules engine. It scores the profile against all three paths (University/Ausbildung/Employment) independently, then compares against the user's stated `desiredPath` to produce one of four outcomes (`confirmed` / `alternative` / `suggested` / `unclear`) — see `Matching-Algorithm-Study.md` §5.1 for why it's structured this way rather than a single flat verdict. All scoring is internal; only the qualitative outcome may ever reach the UI.
+- `frontend/src/lib/occupation-demand.ts` — a static, manually-curated lookup tagging which of the 110 `OccupationField` values are official German shortage occupations. Deliberately kept separate from `types/assessment.ts` (not part of the questionnaire schema, never shown to the user) so it's a clean swap-out point for the planned Phase 2 system: an AI-assisted pipeline that checks official sources periodically and regenerates this data.
+- Neither file is wired into the UI yet — `computeVerdict()` is implemented and was verified against synthetic profiles (see conversation/commit history), but nothing calls it from `AssessmentWizard.tsx` or renders a result screen yet.
 
 ### Frontend conventions
 - Path alias `@/*` → `src/*` (see `tsconfig.json`).

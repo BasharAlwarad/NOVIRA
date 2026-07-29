@@ -1,5 +1,3 @@
-import { AssessmentProvider } from '@/context/AssessmentProvider';
-import { AssessmentWizard } from '@/components/assessment/AssessmentWizard';
 import { Hero } from '@/components/hero';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
@@ -11,14 +9,8 @@ export default async function Home() {
       className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_40%),linear-gradient(180deg,#0f172a_0%,#111827_50%,#f8fafc_50%,#f8fafc_100%)] text-slate-900"
     >
       <SiteNav />
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <section className="mx-auto flex w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
         <Hero />
-
-        <section id="assessment" className="mt-6 scroll-mt-28">
-          <AssessmentProvider>
-            <AssessmentWizard />
-          </AssessmentProvider>
-        </section>
 
         <section
           id="services"

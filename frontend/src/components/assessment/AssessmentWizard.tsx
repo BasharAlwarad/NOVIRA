@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMemo } from 'react';
 import { AssessmentHeader } from '@/components/assessment/AssessmentHeader';
 import {
@@ -45,6 +46,11 @@ const WIZARD_QUESTIONS: ReadonlyArray<AssessmentStepQuestion> =
         | undefined,
       placeholder: question.placeholder,
       textareaRows: question.textareaRows,
+      searchable: question.searchable,
+      multiSelect: question.multiSelect,
+      exclusiveOptionValue: question.exclusiveOptionValue as
+        | string
+        | undefined,
     };
   });
 
@@ -59,6 +65,7 @@ function getCurrentStepConfig(currentStepIndex: number) {
 }
 
 export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
+  const router = useRouter();
   const {
     assessment,
     updateAnswer,
@@ -82,6 +89,10 @@ export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
         return answer.trim().length > 0 ? count + 1 : count;
       }
 
+      if (Array.isArray(answer)) {
+        return answer.length > 0 ? count + 1 : count;
+      }
+
       return answer != null ? count + 1 : count;
     }, 0);
   }, [assessment.answers]);
@@ -100,6 +111,7 @@ export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
     if (isFinalStep) {
       save();
       onComplete?.(assessment);
+      router.push('/assessment/result');
       return;
     }
 
@@ -149,7 +161,7 @@ export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
             isFinalStep={isFinalStep}
             onPrevious={previousStep}
             onNext={handleNext}
-            nextLabel={isFinalStep ? 'Save assessment' : 'Next'}
+            nextLabel={isFinalStep ? 'See my result' : 'Next'}
           />
         </div>
       </div>

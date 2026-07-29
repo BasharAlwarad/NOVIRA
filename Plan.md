@@ -1,6 +1,6 @@
 # NOVIRA — Business Plan
 
-Study document assembled from planning discussion. Reorganized to reflect the current shape of the plan. Not implementation docs (see root `CLAUDE.md` for that) — this is the business/legal/product/go-to-market plan.
+Study document assembled from planning discussion. Reorganized to reflect the current shape of the plan. Not implementation docs (see root `CLAUDE.md` for that) — this is the business/legal/product/go-to-market plan. The matching algorithm's own research and design lives separately in `Matching-Algorithm-Study.md`.
 
 ---
 
@@ -23,7 +23,7 @@ Long-term direction: become a verified-candidate pipeline for German employers/t
 
 Expand to Syria/Jordan/Iraq/Lebanon only after the credential-parsing and matching pipeline is proven on Egypt's cleaner data.
 
-**Sector focus for MVP:** 1–2 sectors only, e.g. healthcare and IT — active shortage occupations in Germany with relatively well-documented foreign-credential paths.
+**Sector focus: superseded by broader occupation research.** The original plan was to narrow the MVP to 1–2 sectors (e.g. healthcare and IT). After the market-research pass, the assessment's occupation field instead covers 110 real occupations across 17 categories — deliberately **not** led by IT or medicine, per direct instruction — including skilled trades, hospitality, logistics, construction, and education, which the research showed have equal or greater real demand. Shortage-occupation status is now tracked per-occupation (`frontend/src/lib/occupation-demand.ts`) rather than by picking 1–2 sectors upfront.
 
 ---
 
@@ -60,9 +60,9 @@ Core design principle: most users will "dip a foot in the water" before committi
 ### Tier 1 — No signup, no documents
 
 1. Wizard answers are saved to **`localStorage` only**. Nothing leaves the browser at this stage — no server processing occurs, so neither GDPR nor Egypt's PDPL cross-border rules are triggered yet. This is also the reason it's safe to defer Phase 0's legal/company-formation work while building and demoing this specific piece (see §11) — that changes the moment real personal data starts leaving the browser, at step 3 below.
-2. A **rules-engine algorithm** (not AI — see §8) reads the saved answers and produces a quick result, shown visually (a simple profile-summary chart or similar), not as a manufactured numeric "match score." Three outcomes, not a binary:
-   - Strong fit for a study/Ausbildung path.
-   - May fit better as a direct job search.
+2. A **rules-engine algorithm** (not AI — see §8) reads the saved answers and produces a quick result, shown visually (a simple profile-summary chart or similar), not as a manufactured numeric "match score." **Implemented** (`frontend/src/lib/assessment-verdict.ts`, design/research in `Matching-Algorithm-Study.md`) — not yet wired into the UI. It scores the profile against all three paths (University/Ausbildung/Employment) and compares against the user's stated choice, producing one of:
+   - Confirmation that the stated path is a strong fit.
+   - A different, specific path suggested instead, when the profile is clearly stronger there.
    - **Unclear — worth a closer personal look.** (Absorbs ambiguous cases instead of forcing a premature "no" from thin, self-reported data — a wrong confident negative here is a real reputational risk.)
    - Wording stays in "program fit" territory per §3, never "chance to travel/enter Germany."
 3. To receive the **full explanation by email**, the user provides an email address. Keep this **email-only** — no password, no full account system. This is the first point real personal data leaves the browser, and the natural point at which a minimal backend capture becomes necessary (a bare `localStorage`-only version can't actually deliver this).
@@ -121,17 +121,17 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 4. **Human-in-the-loop** — every AI-generated match or application gets human sign-off before reaching a user or employer, at least until there's a track record to trust the automation's error rate.
 
 **Current build status vs. the funnel (§4):**
-- Tier 1 intake ≈ already built (assessment wizard: `frontend/src/components/assessment/`, schema in `frontend/src/types/assessment.ts`).
-- Missing for Tier 1: the rules-engine verdict (see below), the visual result screen, email-only capture + privacy notice, a real completion screen (`onComplete` isn't wired in `page.tsx`).
+- Tier 1 intake ≈ already built (assessment wizard: `frontend/src/components/assessment/`, schema in `frontend/src/types/assessment.ts`, now 14 questions including a searchable 110-occupation field and a multi-select Germany-connection question).
+- Tier 1 verdict algorithm **built and tested** against synthetic profiles (`frontend/src/lib/assessment-verdict.ts`, `frontend/src/lib/occupation-demand.ts`) — see `Matching-Algorithm-Study.md`. Not yet wired into the UI.
+- Missing for Tier 1: the visual result screen, wiring `computeVerdict()` into the wizard's completion flow, email-only capture + privacy notice, a real completion screen (`onComplete` isn't wired in `AssessmentWizard.tsx`).
 - Missing for Tier 2 entirely: signup/auth, specific document-consent flow (naming the international transfer), document upload + extraction, the curated opportunities database, matching logic.
 - Backend: bare ASP.NET skeleton plus a `User` model and Postgres (Neon, **Frankfurt/EU region**) connection in place (`backend/Models/User.cs`, `backend/Data/AppDbContext.cs`) — no assessment/matching endpoints yet.
 
-**Tier 1 verdict: rules engine, not AI.** The three-outcome verdict (§4) for the structured, closed-set answers (education, desired path, language levels, passport status, budget) should be a deterministic rules/decision-table engine, not an LLM call:
+**Tier 1 verdict: rules engine, not AI.** The verdict is a deterministic rules/scoring engine, not an LLM call — see `Matching-Algorithm-Study.md` for the full research and design (real German university/Ausbildung/employment admission criteria, the draft scoring weights, and open tuning questions like the known overqualification-scoring gap). Recap of why this matters:
 - Zero marginal cost, no latency, no API dependency.
-- Fully explainable — you can point to exactly why a verdict was given (e.g. "B1 German + Bachelor's + university path → strong fit"), which is *safer* than an LLM output here, not just cheaper — no hallucination risk on a legally-sensitive verdict.
-- The actual decision thresholds (what combination of answers maps to which of the three outcomes) reflect your own professional judgment from doing this manually — not something to invent generically; needs a dedicated conversation to encode before this gets built.
+- Fully explainable — you can point to exactly why a verdict was given, which is *safer* than an LLM output here, not just cheaper — no hallucination risk on a legally-sensitive verdict.
 - The free-text "additional notes" question is **deferred to Tier 2 intake**, not collected in the Tier 1 wizard — keeps the free assessment strictly closed-set/quick, and avoids storing open-ended text before there's a human reviewer (Tier 2) on the other end to actually read it. When Tier 2 intake is built, capture it there, don't feed it into the automated verdict, and surface it only to the human reviewer. Add a light LLM pass on it later only if real data shows the rules-engine verdict is missing signal the free text would have caught — at this volume such a pass would be trivially cheap (fractions of a cent per submission) if/when it's needed, so the reason to defer it is lack of evidence of need, not cost.
-- This entire step can run **client-side** (a pure function reading the `localStorage`-saved answers) — no backend call needed for Tier 1's algorithm itself, only for the email-capture step that follows it.
+- This entire step runs **client-side** (a pure function reading the `localStorage`-saved answers) — no backend call needed for Tier 1's algorithm itself, only for the email-capture step that follows it.
 
 **Frontend rendering & hosting.** Keep the current hybrid: Server Components statically generated (SSG) for marketing/content pages, client components (`'use client'`) for the stateful, interactive assessment wizard — already the architecture in place, no change needed.
 - Don't move to a fully static export / pure-CSR site — would lose Next.js's per-page Metadata API (server-rendered Open Graph tags), which the SEO and Facebook-sharing marketing channels in §9 depend on for link previews and indexing.
@@ -208,9 +208,9 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 *Note on sequencing:* building and demoing the `localStorage`-only Tier 1 flow (below) doesn't require any of this first — no server-side processing occurs, so there's no real legal exposure yet. The plan is to build that MVP first, use it to get concrete lawyer feedback (a working prototype beats a description), and complete Phase 0 before the email-capture step (Phase 1, item 3 below) ships to real users — that's the actual trigger point, not an arbitrary date.
 
 ### Phase 1 — Tier 1 funnel
-- [ ] Wizard answers saved to `localStorage` only (already built)
-- [ ] Build the rules-engine verdict algorithm (client-side, three-outcome framing, program-fit wording only) — needs a decision-table conversation first to encode real judgment, not invented thresholds
-- [ ] Build the visual/qualitative result screen (profile-summary chart, no numeric match score)
+- [x] Wizard answers saved to `localStorage` only (already built)
+- [x] Build the rules-engine verdict algorithm (client-side, program-fit wording only) — `frontend/src/lib/assessment-verdict.ts`, weights approved for now per `Matching-Algorithm-Study.md`, tested against synthetic profiles
+- [ ] Wire `computeVerdict()` into the wizard and build the visual/qualitative result screen (profile-summary style, no numeric match score)
 - [ ] Add email-only capture (no password/account) gating the full explanation, sent by email
 - [ ] Add a short privacy notice at the email-capture point
 - [ ] Create the Neon record (Frankfurt/EU) only once a user provides their email
@@ -221,7 +221,7 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 
 ### Phase 2 — Documents, AI review, monetization checkpoint
 - [ ] Build document upload + specific consent flow (separate from general ToS, explicitly naming the international transfer)
-- [ ] Store opportunities data + case data in the database; seed opportunities from Bundesagentur Ausbildungssuche/Jobsuche API + manual curation (20–50 real entries, Egypt, healthcare + IT only)
+- [ ] Store opportunities data + case data in the database; seed opportunities from Bundesagentur Ausbildungssuche/Jobsuche API + manual curation (20–50 real entries, Egypt, drawing on whichever occupation categories real Tier 1 submissions cluster around — see §2)
 - [ ] Build document extraction (AI reads certificates) and produce a case summary **for your review**, not sent directly to the user
 - [ ] You give the user the final answer, combining AI + your judgment
 - [ ] Add the in-product willingness-to-pay question — no payment system yet, just the ask
@@ -260,6 +260,6 @@ Paid professional-help path once a user agrees to pay. Not yet scoped — revisi
 - Exact pricing for the paid application-support package once Phase 1/2 data exists.
 - Which specific lawyer/firm for the Phase 0 consultation — ideally one who can also speak to (or refer for) Egypt's PDPL, not just German law.
 - Whether a formal Egyptian PDPC license is actually required at your expected scale, or whether specific consent is a sufficient basis on its own.
-- The actual rules-engine decision table for the Tier 1 verdict — needs a dedicated conversation to encode your professional judgment before it's built.
-- Whether healthcare or IT (or both) is the better first sector — may become clearer once Egypt Facebook-group research (§9) shows where real demand/questions cluster.
 - Timing and terms for the first manual B2B employer pilot in Phase 2.
+- Ausbildung scoring doesn't yet discount overqualified profiles (someone with a degree and 5+ years' experience can still score "strong" for Ausbildung) — flagged as a tuning candidate in `Matching-Algorithm-Study.md`, not urgent for MVP.
+- Whether to eventually replace the static shortage-occupation tagging (`frontend/src/lib/occupation-demand.ts`) with the planned AI-assisted pipeline that checks official sources on a rolling basis — deliberately deferred, not scoped yet.

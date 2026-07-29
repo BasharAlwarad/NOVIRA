@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+
 interface StepIndicatorProps {
   currentStepIndex: number;
   steps: ReadonlyArray<{ title: string }>;
@@ -11,15 +13,32 @@ export function StepIndicator({
   steps,
   onStepSelect,
 }: StepIndicatorProps) {
+  const activeTileRef = useRef<HTMLLIElement | null>(null);
+
+  // Re-centers on the active tile whenever the current step changes — via
+  // Next/Previous, a direct tile tap, or the step-jump navigation — so the
+  // carousel only ever moves in response to actual step changes.
+  useEffect(() => {
+    activeTileRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      inline: 'center',
+      block: 'nearest',
+    });
+  }, [currentStepIndex]);
+
   return (
     <nav aria-label="Assessment steps" className="w-full">
-      <ol className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2">
+      <ol className="scrollbar-none flex gap-2 overflow-x-auto scroll-smooth pb-1">
         {steps.map((step, index) => {
           const isActive = index === currentStepIndex;
           const isCompleted = index < currentStepIndex;
 
           return (
-            <li key={step.title} className="min-w-0">
+            <li
+              key={step.title}
+              ref={isActive ? activeTileRef : undefined}
+              className="w-36 shrink-0 sm:w-40"
+            >
               <button
                 type="button"
                 onClick={() => onStepSelect(index)}
@@ -50,13 +69,6 @@ export function StepIndicator({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium sm:text-[15px]">
                     {step.title}
-                  </span>
-                  <span className="block text-xs text-slate-500 sm:text-sm">
-                    {isCompleted
-                      ? 'Tap to review'
-                      : isActive
-                        ? 'Current step'
-                        : 'Tap to jump'}
                   </span>
                 </span>
               </button>

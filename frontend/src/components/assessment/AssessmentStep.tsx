@@ -3,6 +3,7 @@
 import { OptionCard } from '@/components/assessment/OptionCard';
 import { QuestionCard } from '@/components/assessment/QuestionCard';
 import { QuestionTransition } from '@/components/assessment/QuestionTransition';
+import { SearchableSelect } from '@/components/assessment/SearchableSelect';
 import type { AssessmentAnswerValue } from '@/types/assessment';
 
 export interface AssessmentStepOption {
@@ -21,6 +22,9 @@ export interface AssessmentStepQuestion {
   options?: ReadonlyArray<AssessmentStepOption>;
   placeholder?: string;
   textareaRows?: number;
+  searchable?: boolean;
+  multiSelect?: boolean;
+  exclusiveOptionValue?: string;
 }
 
 interface AssessmentStepProps {
@@ -60,14 +64,55 @@ export function AssessmentStep({
               className="min-h-40 w-full rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-base text-slate-900 shadow-sm shadow-slate-200/50 transition-all duration-200 placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
             />
           </label>
+        ) : question.searchable ? (
+          <SearchableSelect
+            options={question.options ?? []}
+            value={typeof answer === 'string' ? answer : null}
+            onChange={(value) => onAnswerChange(question.answerId, value)}
+            placeholder={question.placeholder}
+          />
         ) : (
           <div
             className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
-            role="radiogroup"
+            role={question.multiSelect ? 'group' : 'radiogroup'}
             aria-label={question.prompt}
           >
             {question.options?.map((option) => {
-              const selected = answer === option.value;
+              const selectedValues = Array.isArray(answer) ? answer : [];
+              const selected = question.multiSelect
+                ? selectedValues.includes(option.value)
+                : answer === option.value;
+
+              const handleClick = () => {
+                if (question.multiSelect) {
+                  const exclusiveValue = question.exclusiveOptionValue;
+                  const isExclusiveOption = option.value === exclusiveValue;
+
+                  let nextValues: string[];
+                  if (isExclusiveOption) {
+                    // Picking the "none of these" option clears every other
+                    // selection; picking it again just clears the answer.
+                    nextValues = selected ? [] : [option.value];
+                  } else if (selected) {
+                    nextValues = selectedValues.filter(
+                      (value) => value !== option.value
+                    );
+                  } else {
+                    // Picking any real option clears "none of these" if set.
+                    nextValues = [
+                      ...selectedValues.filter(
+                        (value) => value !== exclusiveValue
+                      ),
+                      option.value,
+                    ];
+                  }
+
+                  onAnswerChange(question.answerId, nextValues);
+                  return;
+                }
+
+                onAnswerChange(question.answerId, option.value);
+              };
 
               return (
                 <OptionCard
@@ -76,9 +121,7 @@ export function AssessmentStep({
                   description={option.description}
                   selected={selected}
                   aria-pressed={selected}
-                  onClick={() =>
-                    onAnswerChange(question.answerId, option.value)
-                  }
+                  onClick={handleClick}
                 />
               );
             })}
