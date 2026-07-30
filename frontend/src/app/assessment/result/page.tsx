@@ -2,12 +2,16 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { DocumentChecklist } from '@/components/assessment/DocumentChecklist';
 import { PathFitChart } from '@/components/assessment/PathFitChart';
+import { PlaceholderOpportunityCounts } from '@/components/assessment/PlaceholderOpportunityCounts';
+import { ProfileImprovementAdvice } from '@/components/assessment/ProfileImprovementAdvice';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import {
   computeVerdict,
   type EvaluablePath,
+  type PathScore,
   type VerdictOutcome,
 } from '@/lib/assessment-verdict';
 import { loadAssessment } from '@/lib/assessment-storage';
@@ -30,6 +34,20 @@ function getHighlightedPath(verdict: VerdictOutcome): EvaluablePath | null {
     default:
       return null;
   }
+}
+
+function getRelevantScore(verdict: VerdictOutcome): PathScore {
+  const highlightedPath = getHighlightedPath(verdict);
+
+  if (highlightedPath) {
+    return verdict.scores.find((score) => score.path === highlightedPath)!;
+  }
+
+  // Unclear — no single path stands out, so fall back to whichever scored
+  // highest so there's still something constructive to offer advice on.
+  return verdict.scores.reduce((best, current) =>
+    current.ratio > best.ratio ? current : best
+  );
 }
 
 function describeVerdict(verdict: VerdictOutcome): {
@@ -110,6 +128,7 @@ export default function AssessmentResultPage() {
   const verdict = computeVerdict(answers);
   const { heading, body } = describeVerdict(verdict);
   const highlightedPath = getHighlightedPath(verdict);
+  const relevantScore = getRelevantScore(verdict);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -133,14 +152,18 @@ export default function AssessmentResultPage() {
               highlightedPath={highlightedPath}
             />
           </div>
-        </div>
 
-        <div className="mt-4 rounded-4xl border border-dashed border-slate-300 bg-white/60 p-6 text-center">
-          <p className="text-sm text-slate-500">
-            We&apos;re building your personalized shortlist of matching
-            Ausbildung and university options — this is where it&apos;ll
-            appear.
-          </p>
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <ProfileImprovementAdvice score={relevantScore} />
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <DocumentChecklist highlightedPath={highlightedPath} />
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <PlaceholderOpportunityCounts />
+          </div>
         </div>
       </section>
       <SiteFooter />

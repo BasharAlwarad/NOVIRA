@@ -15,7 +15,8 @@ import {
  * See Matching-Algorithm-Study.md for the research this is based on and
  * Plan.md §3/§8 for the wording-discipline rules this must respect:
  * the numeric scores below are internal only and must never be shown to
- * the user — only the qualitative `VerdictOutcome` they produce.
+ * the user — only the qualitative `VerdictOutcome` (and the plain-language
+ * improvement advice derived from it) they produce.
  */
 
 export type PathFit = 'strong' | 'borderline' | 'weak';
@@ -25,12 +26,35 @@ export type EvaluablePath =
   | DesiredPath.Ausbildung
   | DesiredPath.Employment;
 
+/** A named key for a scoring factor — used to look up improvement advice. */
+export type ScoreFactorKey =
+  | 'highestEducation'
+  | 'language'
+  | 'germanLevel'
+  | 'englishLevel'
+  | 'languageCertificate'
+  | 'financialSituation'
+  | 'age'
+  | 'workExperience'
+  | 'occupationField'
+  | 'germanyConnection';
+
+export interface ScoreFactor {
+  key: ScoreFactorKey;
+  label: string;
+  points: number;
+  maxPoints: number;
+  /** Whether this factor is realistically something a user can act on soon. */
+  advisable: boolean;
+}
+
 export interface PathScore {
   path: EvaluablePath;
   points: number;
   maxPoints: number;
   ratio: number;
   fit: PathFit;
+  factors: ScoreFactor[];
 }
 
 export type VerdictOutcome =
@@ -61,11 +85,12 @@ function fitFromRatio(ratio: number): PathFit {
 
 function buildScore(
   path: EvaluablePath,
-  points: number,
-  maxPoints: number
+  factors: ScoreFactor[]
 ): PathScore {
+  const points = factors.reduce((sum, factor) => sum + factor.points, 0);
+  const maxPoints = factors.reduce((sum, factor) => sum + factor.maxPoints, 0);
   const ratio = maxPoints > 0 ? points / maxPoints : 0;
-  return { path, points, maxPoints, ratio, fit: fitFromRatio(ratio) };
+  return { path, points, maxPoints, ratio, fit: fitFromRatio(ratio), factors };
 }
 
 // ---- shared signal helpers ------------------------------------------------
@@ -143,114 +168,172 @@ function ageBand(age: string | null): AgeBand {
   return 'unknown';
 }
 
-// ---- University ------------------------------------------------------------
+function educationPoints(
+  education: EducationLevel | null,
+  scale: 'university' | 'ausbildung' | 'employment'
+): number {
+  if (scale === 'university') {
+    switch (education) {
+      case EducationLevel.TechnicalDiploma:
+        return 1;
+      case EducationLevel.Bachelors:
+      case EducationLevel.Masters:
+      case EducationLevel.Doctorate:
+        return 3; // already past the Studienkolleg hurdle
+      default:
+        return 0; // High School or unanswered
+    }
+  }
 
-function scoreUniversity(answers: AssessmentAnswers): PathScore {
-  let points = 0;
-  // Passport status is deliberately excluded from scoring: getting one issued
-  // is a solvable administrative step, not a fit gap, and penalizing an
-  // otherwise-strong profile for it would be misleading. See Matching-Algorithm-Study.md.
-  const maxPoints = 3 + 4 + 1 + 2 + 1; // 11
+  if (scale === 'ausbildung') {
+    switch (education) {
+      case EducationLevel.TechnicalDiploma:
+        return 3;
+      case EducationLevel.HighSchool:
+        return 2;
+      case EducationLevel.Bachelors:
+      case EducationLevel.Masters:
+      case EducationLevel.Doctorate:
+        return 2; // overqualified is fine, not extra credit
+      default:
+        return 0;
+    }
+  }
 
-  switch (answers.highestEducation) {
-    case EducationLevel.TechnicalDiploma:
-      points += 1;
-      break;
+  // employment
+  switch (education) {
     case EducationLevel.Bachelors:
     case EducationLevel.Masters:
     case EducationLevel.Doctorate:
-      points += 3; // already past the Studienkolleg hurdle
-      break;
+      return 3;
+    case EducationLevel.TechnicalDiploma:
+      return 2;
+    case EducationLevel.HighSchool:
+      return 1;
     default:
-      break; // High School or unanswered
+      return 0;
   }
+}
 
-  // Either language route can lead to a valid program (German- or English-taught).
-  points += Math.max(
-    germanLevelPoints(answers.germanLevel),
-    englishLevelPoints(answers.englishLevel)
-  );
-
-  if (hasAnyCertifiedLanguage(answers.languageCertificate)) {
-    points += 1;
-  }
-
-  switch (answers.financialSituation) {
-    case FinancialSituation.Between5000And12000:
-    case FinancialSituation.Unsure:
-      points += 1;
-      break;
-    case FinancialSituation.MoreThan12000:
-      points += 2;
-      break;
+function ageBandPoints(band: AgeBand): number {
+  switch (band) {
+    case '18-30':
+      return 3;
+    case '31-40':
+      return 2;
+    case 'under-18':
+    case '40-plus':
+      return 1;
     default:
-      break; // Less than €5,000
+      return 0;
   }
+}
 
-  if (hasGermanyConnection(answers.germanyConnection)) {
-    points += 1;
-  }
+// ---- University ------------------------------------------------------------
 
-  return buildScore(DesiredPath.University, points, maxPoints);
+function scoreUniversity(answers: AssessmentAnswers): PathScore {
+  // Either language route can lead to a valid program (German- or
+  // English-taught) — credit whichever is currently stronger, since that's
+  // the direct lever on this path's score.
+  const germanPts = germanLevelPoints(answers.germanLevel);
+  const englishPts = englishLevelPoints(answers.englishLevel);
+  const languageIsGerman = germanPts >= englishPts;
+
+  const factors: ScoreFactor[] = [
+    {
+      key: 'highestEducation',
+      label: 'Education level',
+      points: educationPoints(answers.highestEducation, 'university'),
+      maxPoints: 3,
+      advisable: false, // not a quick fix
+    },
+    {
+      key: languageIsGerman ? 'germanLevel' : 'englishLevel',
+      label: languageIsGerman ? 'German language level' : 'English language level',
+      points: Math.max(germanPts, englishPts),
+      maxPoints: 4,
+      advisable: true,
+    },
+    {
+      key: 'languageCertificate',
+      label: 'Certified language exam',
+      points: hasAnyCertifiedLanguage(answers.languageCertificate) ? 1 : 0,
+      maxPoints: 1,
+      advisable: true,
+    },
+    {
+      key: 'financialSituation',
+      label: 'Financial readiness',
+      points:
+        answers.financialSituation === FinancialSituation.MoreThan12000
+          ? 2
+          : answers.financialSituation === FinancialSituation.Between5000And12000 ||
+              answers.financialSituation === FinancialSituation.Unsure
+            ? 1
+            : 0,
+      maxPoints: 2,
+      advisable: true,
+    },
+    {
+      key: 'germanyConnection',
+      label: 'Connection to Germany',
+      points: hasGermanyConnection(answers.germanyConnection) ? 1 : 0,
+      maxPoints: 1,
+      advisable: false, // mostly outside the user's short-term control
+    },
+  ];
+
+  return buildScore(DesiredPath.University, factors);
 }
 
 // ---- Ausbildung -------------------------------------------------------------
 
 function scoreAusbildung(answers: AssessmentAnswers): PathScore {
-  let points = 0;
-  const maxPoints = 3 + 4 + 1 + 3 + 2; // 13
+  const factors: ScoreFactor[] = [
+    {
+      key: 'highestEducation',
+      label: 'Education level',
+      points: educationPoints(answers.highestEducation, 'ausbildung'),
+      maxPoints: 3,
+      advisable: false,
+    },
+    {
+      key: 'germanLevel',
+      label: 'German language level',
+      points: germanLevelPointsForAusbildung(answers.germanLevel),
+      maxPoints: 4,
+      advisable: true,
+    },
+    {
+      key: 'languageCertificate',
+      label: 'Certified German exam',
+      points: hasCertifiedGerman(answers.languageCertificate) ? 1 : 0,
+      maxPoints: 1,
+      advisable: true,
+    },
+    {
+      key: 'age',
+      label: 'Age',
+      points: ageBandPoints(ageBand(answers.age)),
+      maxPoints: 3,
+      advisable: false, // not something to advise on
+    },
+    {
+      key: 'workExperience',
+      label: 'Work experience',
+      points:
+        answers.workExperience === WorkExperience.TwoToFiveYears ||
+        answers.workExperience === WorkExperience.MoreThanFiveYears
+          ? 2
+          : answers.workExperience === WorkExperience.LessThanTwoYears
+            ? 1
+            : 0,
+      maxPoints: 2,
+      advisable: true,
+    },
+  ];
 
-  // Ausbildung is indifferent to academic level, unlike University.
-  switch (answers.highestEducation) {
-    case EducationLevel.TechnicalDiploma:
-      points += 3;
-      break;
-    case EducationLevel.HighSchool:
-      points += 2;
-      break;
-    case EducationLevel.Bachelors:
-    case EducationLevel.Masters:
-    case EducationLevel.Doctorate:
-      points += 2; // overqualified is fine, not extra credit
-      break;
-    default:
-      break;
-  }
-
-  points += germanLevelPointsForAusbildung(answers.germanLevel);
-
-  if (hasCertifiedGerman(answers.languageCertificate)) {
-    points += 1;
-  }
-
-  switch (ageBand(answers.age)) {
-    case '18-30':
-      points += 3;
-      break;
-    case '31-40':
-      points += 2;
-      break;
-    case 'under-18':
-    case '40-plus':
-      points += 1;
-      break;
-    default:
-      break;
-  }
-
-  switch (answers.workExperience) {
-    case WorkExperience.LessThanTwoYears:
-      points += 1;
-      break;
-    case WorkExperience.TwoToFiveYears:
-    case WorkExperience.MoreThanFiveYears:
-      points += 2;
-      break;
-    default:
-      break; // None
-  }
-
-  return buildScore(DesiredPath.Ausbildung, points, maxPoints);
+  return buildScore(DesiredPath.Ausbildung, factors);
 }
 
 // ---- Employment -------------------------------------------------------------
@@ -267,66 +350,113 @@ function occupationDemandPoints(answers: AssessmentAnswers): number {
 }
 
 function scoreEmployment(answers: AssessmentAnswers): PathScore {
-  let points = 0;
-  const maxPoints = 3 + 3 + 4 + 7 + 3 + 1; // 21
+  const factors: ScoreFactor[] = [
+    {
+      key: 'highestEducation',
+      label: 'Education level',
+      points: educationPoints(answers.highestEducation, 'employment'),
+      maxPoints: 3,
+      advisable: false,
+    },
+    {
+      key: 'occupationField',
+      label: 'Occupation demand',
+      points: occupationDemandPoints(answers),
+      maxPoints: 3,
+      advisable: false, // not something to advise changing
+    },
+    {
+      key: 'workExperience',
+      label: 'Work experience',
+      // Both languages contribute independently here — deliberately not
+      // weighting English higher for IT/engineering fields yet, a
+      // reasonable MVP simplification to revisit (Matching-Algorithm-Study.md §6).
+      points:
+        answers.workExperience === WorkExperience.MoreThanFiveYears
+          ? 4
+          : answers.workExperience === WorkExperience.TwoToFiveYears
+            ? 3
+            : answers.workExperience === WorkExperience.LessThanTwoYears
+              ? 1
+              : 0,
+      maxPoints: 4,
+      advisable: true,
+    },
+    {
+      key: 'germanLevel',
+      label: 'German language level',
+      points: germanLevelPoints(answers.germanLevel),
+      maxPoints: 4,
+      advisable: true,
+    },
+    {
+      key: 'englishLevel',
+      label: 'English language level',
+      points: englishLevelPoints(answers.englishLevel),
+      maxPoints: 3,
+      advisable: true,
+    },
+    {
+      key: 'age',
+      label: 'Age',
+      points: ageBandPoints(ageBand(answers.age)),
+      maxPoints: 3,
+      advisable: false,
+    },
+    {
+      key: 'germanyConnection',
+      label: 'Connection to Germany',
+      points: hasGermanyConnection(answers.germanyConnection) ? 1 : 0,
+      maxPoints: 1,
+      advisable: false,
+    },
+  ];
 
-  switch (answers.highestEducation) {
-    case EducationLevel.Bachelors:
-    case EducationLevel.Masters:
-    case EducationLevel.Doctorate:
-      points += 3;
-      break;
-    case EducationLevel.TechnicalDiploma:
-      points += 2;
-      break;
-    case EducationLevel.HighSchool:
-      points += 1;
-      break;
-    default:
-      break;
+  return buildScore(DesiredPath.Employment, factors);
+}
+
+// ---- improvement advice -----------------------------------------------------
+
+const ADVICE_BY_FACTOR: Record<ScoreFactorKey, string> = {
+  highestEducation: '',
+  germanLevel:
+    'Improving your German level — through a course, tutoring, or consistent practice — is one of the most direct ways to strengthen this path. Many programs and employers list German level as a key requirement.',
+  englishLevel:
+    'Strengthening your English level would help, especially for English-taught programs or internationally-oriented employers.',
+  language:
+    'Improving your German or English level would strengthen this path — either can work, depending on the program.',
+  languageCertificate:
+    'Taking a certified language exam (e.g. Goethe-Zertifikat, telc, or TestDaF for German; IELTS or TOEFL for English) turns your self-rated level into documented proof, which institutions and employers generally weigh more heavily than a self-assessment.',
+  financialSituation:
+    'Building toward the funds required for a student visa (a "blocked account," currently around €11,904/year) is one of the most concrete ways to strengthen a university application.',
+  workExperience:
+    'Gaining more hands-on experience in your field — even part-time or informal work — can meaningfully strengthen this path over time.',
+  age: '',
+  occupationField: '',
+  germanyConnection: '',
+};
+
+export interface ImprovementAdvice {
+  factorLabel: string;
+  advice: string;
+}
+
+const ADVICE_RATIO_THRESHOLD = 0.75;
+
+/** Finds the single most actionable weak spot for a path, if any. */
+export function getImprovementAdvice(score: PathScore): ImprovementAdvice | null {
+  const candidates = score.factors
+    .filter((factor) => factor.advisable && factor.maxPoints > 0)
+    .map((factor) => ({ ...factor, factorRatio: factor.points / factor.maxPoints }))
+    .sort((a, b) => a.factorRatio - b.factorRatio);
+
+  const weakest = candidates[0];
+
+  if (!weakest || weakest.factorRatio >= ADVICE_RATIO_THRESHOLD) {
+    return null; // already strong across the board — nothing meaningful to flag
   }
 
-  points += occupationDemandPoints(answers);
-
-  switch (answers.workExperience) {
-    case WorkExperience.LessThanTwoYears:
-      points += 1;
-      break;
-    case WorkExperience.TwoToFiveYears:
-      points += 3;
-      break;
-    case WorkExperience.MoreThanFiveYears:
-      points += 4;
-      break;
-    default:
-      break; // None
-  }
-
-  // Both languages contribute — deliberately not weighting English higher
-  // for IT/engineering fields yet; a reasonable MVP simplification to revisit.
-  points += germanLevelPoints(answers.germanLevel);
-  points += englishLevelPoints(answers.englishLevel);
-
-  switch (ageBand(answers.age)) {
-    case '18-30':
-      points += 3;
-      break;
-    case '31-40':
-      points += 2;
-      break;
-    case 'under-18':
-    case '40-plus':
-      points += 1;
-      break;
-    default:
-      break;
-  }
-
-  if (hasGermanyConnection(answers.germanyConnection)) {
-    points += 1;
-  }
-
-  return buildScore(DesiredPath.Employment, points, maxPoints);
+  return { factorLabel: weakest.label, advice: ADVICE_BY_FACTOR[weakest.key] };
 }
 
 // ---- overall verdict --------------------------------------------------------

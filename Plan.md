@@ -60,11 +60,12 @@ Core design principle: most users will "dip a foot in the water" before committi
 ### Tier 1 — No signup, no documents
 
 1. Wizard answers are saved to **`localStorage` only**. Nothing leaves the browser at this stage — no server processing occurs, so neither GDPR nor Egypt's PDPL cross-border rules are triggered yet. This is also the reason it's safe to defer Phase 0's legal/company-formation work while building and demoing this specific piece (see §11) — that changes the moment real personal data starts leaving the browser, at step 3 below.
-2. A **rules-engine algorithm** (not AI — see §8) reads the saved answers and produces a quick result, shown visually (a simple profile-summary chart or similar), not as a manufactured numeric "match score." **Implemented** (`frontend/src/lib/assessment-verdict.ts`, design/research in `Matching-Algorithm-Study.md`) — not yet wired into the UI. It scores the profile against all three paths (University/Ausbildung/Employment) and compares against the user's stated choice, producing one of:
+2. A **rules-engine algorithm** (not AI — see §8) reads the saved answers and produces a quick result, shown visually (a simple profile-summary chart, not a manufactured numeric "match score"), at `/assessment/result`. **Implemented and wired up** (`frontend/src/lib/assessment-verdict.ts`, design/research in `Matching-Algorithm-Study.md`). It scores the profile against all three paths (University/Ausbildung/Employment) and compares against the user's stated choice, producing one of:
    - Confirmation that the stated path is a strong fit.
    - A different, specific path suggested instead, when the profile is clearly stronger there.
    - **Unclear — worth a closer personal look.** (Absorbs ambiguous cases instead of forcing a premature "no" from thin, self-reported data — a wrong confident negative here is a real reputational risk.)
    - Wording stays in "program fit" territory per §3, never "chance to travel/enter Germany."
+   The result page also shows real, algorithm-derived advice on the single weakest part of the profile, a general (not personalized) document checklist, and — clearly marked as a mock preview, not real data — a placeholder count of matching opportunities, standing in for the real Phase 2 opportunities database.
 3. To receive the **full explanation by email**, the user provides an email address. Keep this **email-only** — no password, no full account system. This is the first point real personal data leaves the browser, and the natural point at which a minimal backend capture becomes necessary (a bare `localStorage`-only version can't actually deliver this).
 4. Once the user provides their email, create the Neon record with **minimal data** — just the email (plus maybe the Tier 1 answers for continuity). This reduces risk and the scope of what needs disclosing, but doesn't eliminate legal obligations outright: an email address is still personal data. At this exact point, add a short, honest **privacy notice** next to the field (what's collected, why, how long it's kept, that deletion can be requested) — light enough not to need the Phase 0 lawyer for this specific piece, but it should exist before this ships to real users.
 
@@ -122,8 +123,8 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 
 **Current build status vs. the funnel (§4):**
 - Tier 1 intake ≈ already built (assessment wizard: `frontend/src/components/assessment/`, schema in `frontend/src/types/assessment.ts`, now 14 questions including a searchable 110-occupation field and a multi-select Germany-connection question).
-- Tier 1 verdict algorithm **built and tested** against synthetic profiles (`frontend/src/lib/assessment-verdict.ts`, `frontend/src/lib/occupation-demand.ts`) — see `Matching-Algorithm-Study.md`. Not yet wired into the UI.
-- Missing for Tier 1: the visual result screen, wiring `computeVerdict()` into the wizard's completion flow, email-only capture + privacy notice, a real completion screen (`onComplete` isn't wired in `AssessmentWizard.tsx`).
+- Tier 1 verdict **built, tested, and wired up end to end** — completing the wizard now lands on a real result page (`frontend/src/app/assessment/result/`) showing the verdict, a fit-comparison chart, improvement advice, and a document checklist. See `Matching-Algorithm-Study.md`.
+- Missing for Tier 1: email-only capture + privacy notice, and the real (non-mock) opportunities data behind the placeholder counts on the result page.
 - Missing for Tier 2 entirely: signup/auth, specific document-consent flow (naming the international transfer), document upload + extraction, the curated opportunities database, matching logic.
 - Backend: bare ASP.NET skeleton plus a `User` model and Postgres (Neon, **Frankfurt/EU region**) connection in place (`backend/Models/User.cs`, `backend/Data/AppDbContext.cs`) — no assessment/matching endpoints yet.
 
@@ -210,11 +211,10 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 ### Phase 1 — Tier 1 funnel
 - [x] Wizard answers saved to `localStorage` only (already built)
 - [x] Build the rules-engine verdict algorithm (client-side, program-fit wording only) — `frontend/src/lib/assessment-verdict.ts`, weights approved for now per `Matching-Algorithm-Study.md`, tested against synthetic profiles
-- [ ] Wire `computeVerdict()` into the wizard and build the visual/qualitative result screen (profile-summary style, no numeric match score)
+- [x] Wire `computeVerdict()` into the wizard and build the visual/qualitative result screen — `/assessment/result`, doubling as the wizard's completion screen (profile-summary style, no numeric match score)
 - [ ] Add email-only capture (no password/account) gating the full explanation, sent by email
 - [ ] Add a short privacy notice at the email-capture point
 - [ ] Create the Neon record (Frankfurt/EU) only once a user provides their email
-- [ ] Wire up a real completion screen (currently a dead end — `onComplete` unused)
 - [ ] Begin Facebook-group presence (§9) — answering for free, no pitch yet
 - [ ] Stay free — goal is validating match quality and collecting real outcome data, not revenue
 - [ ] Localize UI to Arabic before Phase 2's marketing push starts sending traffic to the product (built English-first for faster iteration during development)

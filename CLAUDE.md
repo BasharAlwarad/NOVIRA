@@ -17,11 +17,10 @@ The two apps are run and deployed independently — there is no shared package/w
 
 **Active — Phase 1: Tier 1 funnel (no signup, no documents; everything stays in `localStorage` until the email-capture step).**
 - [x] Rules-engine verdict: a client-side pure function over the saved `AssessmentAnswers` — no backend call, no LLM. See "Matching algorithm" below. Weights are approved-for-now per `Matching-Algorithm-Study.md` §6, expected to be tuned once real submissions come in — a known limitation (Ausbildung scoring doesn't yet penalize overqualification) is tracked there, not fixed yet.
-- [ ] Visual, qualitative result screen presenting that verdict (profile-summary style, not a percentage/score) — `computeVerdict()` exists and is tested, but nothing in the UI calls it yet.
+- [x] Visual, qualitative result screen at `/assessment/result` — wired up end to end (wizard's final step navigates there on completion; this also serves as the wizard's completion screen, no separate one needed).
 - [ ] Email-only capture (no password, no full account) gating a "full explanation sent by email" — this is the first point real data leaves the browser.
 - [ ] Short, plain-language privacy notice next to that email field once it exists.
 - [ ] `Users` row created in Neon only after an email is actually captured.
-- [ ] Real completion screen for the wizard — `onComplete` in `AssessmentWizard.tsx` is currently unwired, so finishing today produces no visible confirmation.
 
 **Deferred — do not build unless specifically asked:**
 - Tier 2: document upload, real auth, AI document analysis, opportunities database, matching engine (Phase 2 — gated on the Phase 0 legal review of consent wording, see `Plan.md` §3/§4).
@@ -74,9 +73,10 @@ Two question-rendering variants beyond the plain option-card grid, both driven b
 The assessment lives at its own route, `frontend/src/app/assessment/page.tsx` — not embedded on the homepage — specifically so a 14-question form doesn't compete with marketing/trust content for attention.
 
 ### Matching algorithm
-- `frontend/src/lib/assessment-verdict.ts` — `computeVerdict(answers)` is the Tier 1 rules engine. It scores the profile against all three paths (University/Ausbildung/Employment) independently, then compares against the user's stated `desiredPath` to produce one of four outcomes (`confirmed` / `alternative` / `suggested` / `unclear`) — see `Matching-Algorithm-Study.md` §5.1 for why it's structured this way rather than a single flat verdict. All scoring is internal; only the qualitative outcome may ever reach the UI.
+- `frontend/src/lib/assessment-verdict.ts` — `computeVerdict(answers)` is the Tier 1 rules engine. It scores the profile against all three paths (University/Ausbildung/Employment) independently, then compares against the user's stated `desiredPath` to produce one of four outcomes (`confirmed` / `alternative` / `suggested` / `unclear`) — see `Matching-Algorithm-Study.md` §5.1 for why it's structured this way rather than a single flat verdict. Each `PathScore` also carries a `factors: ScoreFactor[]` breakdown (per-question point contributions), which `getImprovementAdvice()` uses to find the single weakest *actionable* factor for a path and return real, non-fabricated advice text (or `null` when nothing meaningful stands out). All scoring is internal; only the qualitative outcome and advice text may ever reach the UI.
 - `frontend/src/lib/occupation-demand.ts` — a static, manually-curated lookup tagging which of the 110 `OccupationField` values are official German shortage occupations. Deliberately kept separate from `types/assessment.ts` (not part of the questionnaire schema, never shown to the user) so it's a clean swap-out point for the planned Phase 2 system: an AI-assisted pipeline that checks official sources periodically and regenerates this data.
-- Neither file is wired into the UI yet — `computeVerdict()` is implemented and was verified against synthetic profiles (see conversation/commit history), but nothing calls it from `AssessmentWizard.tsx` or renders a result screen yet.
+- Wired into the UI at `frontend/src/app/assessment/result/page.tsx`, which loads the saved answers from `localStorage`, calls `computeVerdict()`, and renders, in order: the verdict text, `PathFitChart.tsx` (an "emphasis" bar chart — recommended path in the brand accent, the other two gray, no numeric labels anywhere per the qualitative-only rule), `ProfileImprovementAdvice.tsx` (real data from `getImprovementAdvice()`), `DocumentChecklist.tsx` (general, path-specific, publicly-sourced document info — not personalized advice, see the disclaimer in the component), and `PlaceholderOpportunityCounts.tsx`.
+- **`PlaceholderOpportunityCounts.tsx` is mock data** — hardcoded numbers for the founder's own product-vision prototyping, not connected to anything real. It's loudly commented and named to make that unmistakable; if you're touching this component, do not make the numbers look "wired up" without actually wiring them up. Must be replaced (or gated off) before any real user sees this page.
 
 ### Frontend conventions
 - Path alias `@/*` → `src/*` (see `tsconfig.json`).
