@@ -117,9 +117,12 @@ Avoid the failure mode of "recurring subscription with a vague eventual payoff c
 Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for planning purposes — this is one pipeline, not three separate "AIs":
 
 1. **Document extraction** (Tier 2) — LLM-vision/OCR turns certificates/CVs into a structured profile. Hard part is multilingual, inconsistent source documents, not the AI itself.
-2. **Opportunities database** — curated, not scraped. Seed from the Bundesagentur für Arbeit's (unofficial but documented) Ausbildungssuche/Jobsuche API plus manual curation — 20–50 real, verified opportunities is enough to start. Treat as a data-maintenance problem.
-3. **Matching/ranking** — starts rule-based (language level, credential-recognition status, budget) with an LLM only for fuzzy explanation/summarization. Every claim the AI makes should trace back to a real source (an actual posting, an actual university's stated requirement) — never a free-floating LLM claim, given the stakes for users.
-4. **Human-in-the-loop** — every AI-generated match or application gets human sign-off before reaching a user or employer, at least until there's a track record to trust the automation's error rate.
+2. **Opportunities database** — curated, not scraped, and **University/Ausbildung only for now** — employment/job matching is explicitly excluded (real-time job-posting data is a harder, less stable data problem than semester-based program data; revisit later). Confirmed data sources (researched 2026-07-31):
+   - **Ausbildung:** the Bundesagentur für Arbeit's "Jobsuche" API, filtered to `angebotsart=4` (apprenticeships/dual study) — there is no separate "Ausbildungssuche" API, it's the same endpoint. This is **not an official/published API** — the Bundesagentur has not released one; this is a community-documented interface to the same backend the public Jobbörse site uses (see `bundesAPI/jobsuche-api` on GitHub), with no formal ToS or rate limits stated. Free and usable now, but treat as prototype-grade — reliability/legal footing should be revisited before depending on it at real production scale.
+   - **University:** no self-serve API exists. Hochschulkompass (HRK's official database, ~19,000 programs, university-authorised data) only offers data access by becoming a "collaborative partner" — requires direct outreach to HRK, cost/format/timeline unconfirmed. DAAD's "International Programmes in Germany" database also has no public API. Interim plan: hand-curate a small starter set of real university programs (same manual pattern as `occupation-demand.ts`) while the HRK partnership outreach happens in parallel as a business action item, not a code task.
+   - Target: 20–50 real, verified opportunities is enough to start. Data gathering + human review cadence: roughly once a day or less — program-level data doesn't change often, so the actual effort is building an accurate first dataset, not the refresh frequency.
+3. **Matching/ranking** — starts rule-based (language level, credential-recognition status, budget) with an LLM only for fuzzy explanation/summarization. Every claim the AI makes should trace back to a real source (an actual posting, an actual university's stated requirement) — never a free-floating LLM claim, given the stakes for users. This is the same anti-fabrication discipline already applied to `PlaceholderOpportunityCounts.tsx` and `occupation-demand.ts`.
+4. **Human-in-the-loop on individual cases** — deferred, not immediate. Given solo-founder capacity, the near-term build is AI-heavy with no per-case human review; human sign-off on individual matches/case summaries gets added **closer to actual production**, not now. This is a resourcing decision, tracked here so it isn't confused with the opportunities-database curation above (which does need a human on a daily-ish cadence — that's data maintenance, not case review).
 
 **Current build status vs. the funnel (§4):**
 - Tier 1 intake ≈ already built (assessment wizard: `frontend/src/components/assessment/`, schema in `frontend/src/types/assessment.ts`, now 14 questions including a searchable 110-occupation field and a multi-select Germany-connection question).
@@ -222,16 +225,27 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 - [ ] Localize UI to Arabic before Phase 2's marketing push starts sending traffic to the product (built English-first for faster iteration during development)
 
 ### Phase 2 — Documents, AI review, monetization checkpoint
-- [ ] Build document upload + specific consent flow (separate from general ToS, explicitly naming the international transfer)
-- [ ] Store opportunities data + case data in the database; seed opportunities from Bundesagentur Ausbildungssuche/Jobsuche API + manual curation (20–50 real entries, Egypt, drawing on whichever occupation categories real Tier 1 submissions cluster around — see §2)
-- [ ] Build document extraction (AI reads certificates) and produce a case summary **for your review**, not sent directly to the user
-- [ ] You give the user the final answer, combining AI + your judgment
-- [ ] Add the in-product willingness-to-pay question — no payment system yet, just the ask
-- [ ] If declined: delete case data, keep the account, inform the user (framed as a proactive privacy commitment)
-- [ ] If accepted: move to Phase 3 (still under study)
-- [ ] Start short-form video content (§9) using real (anonymized/consented) case studies from Phase 1
-- [ ] Manually pitch 2–3 German employers/training providers — vet and personally introduce 2–3 candidates by hand, no product automation yet
-- [ ] Approach GUC/Goethe-Institut communities with a free workshop
+
+**Resequenced (2026-07-31): split into a part that doesn't touch real user data (safe to build now, not gated on Phase 0) and a part that does (stays gated).** The opportunities database involves no personal data at all — it's public information about German institutions/programs — so building it doesn't trigger the GDPR/PDPL exposure described in §3/§7. Document upload from actual users is where that exposure starts, so that part still waits.
+
+**Active now — opportunities data + matching pipeline (no real user data involved):**
+- [ ] Build the curated University + Ausbildung opportunities database — see §8 for confirmed data sources and sequencing. Jobs/employment explicitly excluded for now.
+- [ ] Build the matching/ranking layer against that verified data (rule-based + LLM explanation, never free-generated institution names — §8).
+- [ ] Deliverable for this phase: a more in-depth case study than Tier 1's rules-engine verdict, plus a short list of real, specific matching organizations (Ausbildung providers/universities) in Germany for that case — not just a qualitative fit bucket.
+- [ ] AI-heavy, no per-case human review yet (§8) — human-in-the-loop on individual cases is a later addition, closer to production, not a blocker for building this now.
+
+**Still gated on Phase 0 (real user documents, real consent, real liability):**
+- [ ] Build document upload + specific consent flow (separate from general ToS, explicitly naming the international transfer) — only for actual real users; the pipeline above should be built/tested against synthetic or the founder's own data in the meantime, not opened to real user submissions before this consent flow and Phase 0 exist.
+- [ ] Document set to request, once this opens: passport copy, language certificate/level, CV, rough proof of financial situation, plus path-specific: prior degree/transcripts + translation (university), secondary certificate + translation (Ausbildung). Deliberately scoped to what a case-assessment step needs, not a full visa-application dossier (which includes things like a signed training contract or job offer that only exist *after* a match is made) — see the document-requirements research this decision is based on (Ausbildung visa checklist, uni-assist/DAAD, skilled-worker visa checklist).
+- [ ] Build document extraction (AI reads certificates) and produce a case summary **for your review**, not sent directly to the user — once human-in-the-loop is actually staffed (see §8).
+- [ ] You give the user the final answer, combining AI + your judgment.
+- [ ] Applying on a user's behalf, and generating resumes/cover letters — explicitly deferred until the company (Phase 0) is real; acting on someone's behalf creates Vollmacht liability (§3), so this isn't a "build it, gate it in the UI" situation like the rest of this list.
+- [ ] Add the in-product willingness-to-pay question — no payment system yet, just the ask.
+- [ ] If declined: delete case data, keep the account, inform the user (framed as a proactive privacy commitment).
+- [ ] If accepted: move to Phase 3 (still under study).
+- [ ] Start short-form video content (§9) using real (anonymized/consented) case studies from Phase 1.
+- [ ] Manually pitch 2–3 German employers/training providers — vet and personally introduce 2–3 candidates by hand, no product automation yet.
+- [ ] Approach GUC/Goethe-Institut communities with a free workshop.
 
 ### Phase 3 — Still under study
 Paid professional-help path once a user agrees to pay. Not yet scoped — revisit once Phase 2 produces real signal.
@@ -265,3 +279,5 @@ Paid professional-help path once a user agrees to pay. Not yet scoped — revisi
 - Timing and terms for the first manual B2B employer pilot in Phase 2.
 - Ausbildung scoring doesn't yet discount overqualified profiles (someone with a degree and 5+ years' experience can still score "strong" for Ausbildung) — flagged as a tuning candidate in `Matching-Algorithm-Study.md`, not urgent for MVP.
 - Whether to eventually replace the static shortage-occupation tagging (`frontend/src/lib/occupation-demand.ts`) with the planned AI-assisted pipeline that checks official sources on a rolling basis — deliberately deferred, not scoped yet.
+- Whether to actually pursue Hochschulkompass/HRK "collaborative partner" status for official university program data (§8) — outreach not yet started; until/unless it happens, university data stays hand-curated.
+- The Bundesagentur für Arbeit "Jobsuche" API used for Ausbildung data (§8) is unofficial/community-documented, not government-published — worth a periodic gut-check that it still works and hasn't been superseded by something official, especially before leaning on it at real scale.

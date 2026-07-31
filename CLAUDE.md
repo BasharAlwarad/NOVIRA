@@ -13,6 +13,12 @@ The two apps are run and deployed independently — there is no shared package/w
 
 **Full business/legal/product reasoning** (legal scope constraints, the two-tier user funnel, why the Tier 1 verdict is a rules engine and not an LLM call, why the UI is English-first for now) lives in `Plan.md`, not here — read it before adding features that touch matching logic, user data collection, or anything advice/eligibility-adjacent. **The matching algorithm's own research and design** (real German university/Ausbildung/employment criteria, the draft scoring weights, open tuning questions) lives in `Matching-Algorithm-Study.md` — read it before changing anything in `lib/assessment-verdict.ts` or `lib/occupation-demand.ts`. This file only tracks the short technical version: what phase we're building right now.
 
+## Working methodology
+
+**Breadth-first, not depth-first (as of 2026-07-31):** get each new piece of the user journey minimally working end-to-end before polishing any single piece, rather than fully finishing/polishing one component before starting the next. This is a deliberate choice for a prototype whose purpose is to be demoed and get feedback — polishing early risks investing in details that get reworked once the full flow is validated. Don't proactively suggest polishing an already-working piece; keep moving across the skeleton unless told otherwise.
+
+The condition that makes this safe: every shortcut, blocker skipped, or known weakness accepted to keep moving **must be tracked, not silently dropped** — add it to "Deferred" in Current build phase below, or to a "Known limitations" note near the relevant architecture section (see the "Known security limitations" pattern under Email capture & result email), the same way `PlaceholderOpportunityCounts.tsx` is loudly marked as mock rather than quietly left ambiguous. Once the full skeleton exists, come back and harden/polish step by step — that pass is expected to follow, not skipped forever.
+
 ## Current build phase
 
 **Priority note (as of 2026-07-29):** this is a mockup/prototype, not going to production yet. Legal/compliance work (Phase 0 below) is deliberately paused — don't proactively raise or push it; keep it tracked, not actioned, until told otherwise. Focus is on building product features.
@@ -24,8 +30,17 @@ The two apps are run and deployed independently — there is no shared package/w
 - [x] Plain-language privacy notice next to the email field, in `SaveResultPrompt.tsx`.
 - [x] `Users` row created in Neon only after an email is actually captured — `POST /leads` upserts on normalized (trimmed, lowercased) email, idempotent on resubmit.
 
+**Active — Phase 2 (partial, as of 2026-07-31): opportunities data + matching, scoped to what doesn't touch real user documents.** Not built yet, but explicitly not deferred either — see `Plan.md` §8/§11 for the full reasoning behind this split.
+- University + Ausbildung only — jobs/employment matching is explicitly excluded for now (real-time job-posting data is a harder, less stable problem than semester-based program data).
+- Ausbildung data source: Bundesagentur für Arbeit's "Jobsuche" API filtered to `angebotsart=4` — unofficial/community-documented (`bundesAPI/jobsuche-api` on GitHub), no published ToS/rate limit, fine for prototype, not a committed production dependency.
+- University data source: no self-serve API exists (Hochschulkompass/HRK requires becoming a "collaborative partner" via direct outreach — a business action item, not a code task; DAAD's programme database has no public API either). Interim: hand-curate a starter set the same way `occupation-demand.ts` is curated.
+- The matching/AI layer must only select from and explain this verified data — never free-generate institution names or program details, same discipline as `PlaceholderOpportunityCounts.tsx`.
+- AI-heavy, no per-case human review yet — that gets added closer to production, not now (solo-founder resourcing call). Daily-ish human review of the *opportunities data itself* (not individual user cases) is the near-term human-in-the-loop.
+- Deliverable: a deeper case study than the Tier 1 verdict, plus a short list of real, specific matching organizations for that case.
+
 **Deferred — do not build unless specifically asked:**
-- Tier 2: document upload, real auth, AI document analysis, opportunities database, matching engine (Phase 2 — gated on the Phase 0 legal review of consent wording, see `Plan.md` §3/§4).
+- Real user document upload, auth, and AI+human review of actual user submissions — gated on the Phase 0 legal review of consent wording, see `Plan.md` §3/§4. Build/test the pipeline above against synthetic or the founder's own data in the meantime; don't open it to real user submissions before this exists. Document set already scoped for when it does (see `Plan.md` §11 Phase 2) — narrower than a full visa-application dossier, since this is a case-assessment step, not visa filing.
+- Applying on a user's behalf, and resume/cover-letter generation — deferred until company formation (Phase 0) is real; acting on someone's behalf creates real (Vollmacht) liability, see `Plan.md` §3.
 - Payment/subscription handling (Phase 2/3) — not until the in-product willingness-to-pay question shows real signal.
 - Arabic localization — English-first through development; lands right before Phase 2's marketing push starts, not before.
 - Company formation / lawyer consultation (Phase 0) — deliberately running in parallel with or after the Tier 1 MVP build, not a blocker for the items above.
