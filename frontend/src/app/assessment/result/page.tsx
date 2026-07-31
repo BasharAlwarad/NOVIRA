@@ -6,15 +6,23 @@ import { DocumentChecklist } from '@/components/assessment/DocumentChecklist';
 import { PathFitChart } from '@/components/assessment/PathFitChart';
 import { PlaceholderOpportunityCounts } from '@/components/assessment/PlaceholderOpportunityCounts';
 import { ProfileImprovementAdvice } from '@/components/assessment/ProfileImprovementAdvice';
+import { SaveResultPrompt } from '@/components/assessment/SaveResultPrompt';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import {
   computeVerdict,
+  getImprovementAdvice,
   type EvaluablePath,
   type PathScore,
   type VerdictOutcome,
 } from '@/lib/assessment-verdict';
 import { loadAssessment } from '@/lib/assessment-storage';
+import {
+  FIT_LABELS,
+  FIT_WIDTH,
+  PATH_NAMES,
+  getDocumentChecklistItems,
+} from '@/lib/result-display';
 import { DesiredPath, type AssessmentAnswers } from '@/types/assessment';
 
 const PATH_LABELS: Record<EvaluablePath, string> = {
@@ -129,6 +137,16 @@ export default function AssessmentResultPage() {
   const { heading, body } = describeVerdict(verdict);
   const highlightedPath = getHighlightedPath(verdict);
   const relevantScore = getRelevantScore(verdict);
+  const advice = getImprovementAdvice(relevantScore);
+  const pathFit = [...verdict.scores]
+    .sort((a, b) => b.ratio - a.ratio)
+    .map((score) => ({
+      pathLabel: PATH_NAMES[score.path],
+      fitLabel: FIT_LABELS[score.fit],
+      barPercent: FIT_WIDTH[score.fit],
+      highlighted: score.path === highlightedPath,
+    }));
+  const documentChecklist = [...getDocumentChecklistItems(highlightedPath)];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -159,6 +177,17 @@ export default function AssessmentResultPage() {
 
           <div className="mt-8 border-t border-slate-100 pt-6">
             <DocumentChecklist highlightedPath={highlightedPath} />
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <SaveResultPrompt
+              verdictHeading={heading}
+              verdictBody={body}
+              adviceFactorLabel={advice?.factorLabel ?? null}
+              adviceText={advice?.advice ?? null}
+              pathFit={pathFit}
+              documentChecklist={documentChecklist}
+            />
           </div>
 
           <div className="mt-8 border-t border-slate-100 pt-6">

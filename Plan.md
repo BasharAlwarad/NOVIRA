@@ -208,6 +208,8 @@ Full technical/architecture notes live in the repo's `CLAUDE.md`. Summary for pl
 
 *Note on sequencing:* building and demoing the `localStorage`-only Tier 1 flow (below) doesn't require any of this first — no server-side processing occurs, so there's no real legal exposure yet. The plan is to build that MVP first, use it to get concrete lawyer feedback (a working prototype beats a description), and complete Phase 0 before the email-capture step (Phase 1, item 3 below) ships to real users — that's the actual trigger point, not an arbitrary date.
 
+**Status (2026-07-29): explicitly paused.** Still a mockup/prototype, not going to production — this phase's items stay tracked here as reminders but are not active work. Do not raise or push on this unprompted; resume once real launch is actually approaching.
+
 ### Phase 1 — Tier 1 funnel
 - [x] Wizard answers saved to `localStorage` only (already built)
 - [x] Build the rules-engine verdict algorithm (client-side, program-fit wording only) — `frontend/src/lib/assessment-verdict.ts`, weights approved for now per `Matching-Algorithm-Study.md`, tested against synthetic profiles

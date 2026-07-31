@@ -1,32 +1,10 @@
-import type { EvaluablePath, PathFit, PathScore } from '@/lib/assessment-verdict';
-import { DesiredPath } from '@/types/assessment';
+import type { EvaluablePath, PathScore } from '@/lib/assessment-verdict';
+import { FIT_LABELS, FIT_WIDTH, PATH_NAMES } from '@/lib/result-display';
 
 interface PathFitChartProps {
   scores: ReadonlyArray<PathScore>;
   highlightedPath?: EvaluablePath | null;
 }
-
-const PATH_NAMES: Record<EvaluablePath, string> = {
-  [DesiredPath.University]: 'University',
-  [DesiredPath.Ausbildung]: 'Ausbildung',
-  [DesiredPath.Employment]: 'Employment',
-};
-
-// Deliberately words, not numbers — this chart must never imply a precision
-// we don't claim (Plan.md §3 / Matching-Algorithm-Study.md guardrails).
-const FIT_LABELS: Record<PathFit, string> = {
-  strong: 'Strong fit',
-  borderline: 'Possible fit',
-  weak: 'Limited fit',
-};
-
-// Fixed representative widths per qualitative band — not the exact computed
-// ratio. The bar communicates "strong vs. possible vs. limited," never a score.
-const FIT_WIDTH: Record<PathFit, number> = {
-  strong: 90,
-  borderline: 58,
-  weak: 28,
-};
 
 export function PathFitChart({ scores, highlightedPath }: PathFitChartProps) {
   const sortedScores = [...scores].sort((a, b) => b.ratio - a.ratio);
