@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Novira.Backend.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Novira.Backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260731081942_AddOpportunities")]
+    partial class AddOpportunities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -28,9 +31,6 @@ namespace Novira.Backend.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateOnly?>("ApplicationDeadline")
-                        .HasColumnType("date");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -40,15 +40,6 @@ namespace Novira.Backend.Migrations
                     b.Property<string>("Location")
                         .HasColumnType("text");
 
-                    b.Property<int?>("MinEducationLevel")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MonthlyCompensationEur")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("OccupationField")
-                        .HasColumnType("text");
-
                     b.Property<int>("Path")
                         .HasColumnType("integer");
 
@@ -56,29 +47,11 @@ namespace Novira.Backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int?>("RequiredEnglishLevel")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RequiredGermanLevel")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("RequiresCertifiedLanguageProof")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SourceRef")
-                        .HasColumnType("text");
-
                     b.Property<string>("SourceUrl")
                         .HasColumnType("text");
-
-                    b.Property<DateOnly?>("StartDate")
-                        .HasColumnType("date");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -86,9 +59,6 @@ namespace Novira.Backend.Migrations
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int?>("TuitionFeeEur")
-                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

@@ -2,10 +2,12 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Net.Mail;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
+using Novira.Backend.Endpoints;
 using Novira.Backend.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +27,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddHttpClient();
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services.AddScoped<AdminAuthFilter>();
 
 // Coarse per-IP ceiling on /leads. Note this only ever sees the Next.js
 // server's IP for browser traffic (the frontend proxies the request
@@ -52,10 +59,18 @@ var app = builder.Build();
 app.UseCors("frontend");
 app.UseRateLimiter();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await OpportunitySeeder.SeedIfEmptyAsync(db);
+}
+
 app.MapGet("/", () => Results.Ok(new
 {
     message = "NOVIRA API is running"
 }));
+
+app.MapOpportunitiesAdminEndpoints();
 
 app.MapPost("/leads", async (
     SaveResultRequest request,

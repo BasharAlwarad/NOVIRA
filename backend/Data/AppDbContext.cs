@@ -6,6 +6,7 @@ namespace Novira.Backend.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<Opportunity> Opportunities => Set<Opportunity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
