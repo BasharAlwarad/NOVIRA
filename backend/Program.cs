@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
 using Novira.Backend.Endpoints;
 using Novira.Backend.Models;
+using Novira.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddHttpClient();
 
+builder.Services.AddHttpClient<BundesagenturJobsucheClient>(client =>
+{
+    client.BaseAddress = new Uri("https://rest.arbeitsagentur.de/");
+    client.DefaultRequestHeaders.Add("X-API-Key", "jobboerse-jobsuche");
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddScoped<OpportunitySyncService>();
+
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -44,6 +53,21 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
     options.AddPolicy("leads", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    // Same coarse defense-in-depth reasoning as "leads" above — this is a
+    // public, no-admin-key endpoint (anyone who finished the assessment can
+    // call it, not just the founder), so the real per-visitor throttling
+    // needs to live in the frontend Route Handler where the actual client
+    // IP is visible; this is the backend-side ceiling underneath that.
+    options.AddPolicy("opportunity-counts", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
@@ -71,6 +95,8 @@ app.MapGet("/", () => Results.Ok(new
 }));
 
 app.MapOpportunitiesAdminEndpoints();
+app.MapMatchingEndpoints();
+app.MapOpportunityCountsEndpoints();
 
 app.MapPost("/leads", async (
     SaveResultRequest request,
@@ -102,6 +128,28 @@ app.MapPost("/leads", async (
         {
             user = new User { Email = normalizedEmail };
             db.Users.Add(user);
+        }
+
+        // Tier 1 profile snapshot — self-reported, no verification of any
+        // kind (see the comment on User.cs). Overwritten on every capture,
+        // not merged, so the row always reflects the most recent assessment.
+        if (request.Profile is { } profile)
+        {
+            user.Country = profile.Country;
+            user.Age = profile.Age;
+            user.HighestEducation = profile.HighestEducation;
+            user.OccupationField = profile.OccupationField;
+            user.WorkExperience = profile.WorkExperience;
+            user.DesiredPath = profile.DesiredPath;
+            user.GermanLevel = profile.GermanLevel;
+            user.EnglishLevel = profile.EnglishLevel;
+            user.LanguageCertificate = profile.LanguageCertificate;
+            user.PassportStatus = profile.PassportStatus;
+            user.GermanyConnection = profile.GermanyConnection;
+            user.FinancialSituation = profile.FinancialSituation;
+            user.StartTimeline = profile.StartTimeline;
+            user.RegionFlexibility = profile.RegionFlexibility;
+            user.ProfileUpdatedAt = DateTime.UtcNow;
         }
 
         // The DB write is the real conversion event and must succeed
@@ -174,10 +222,21 @@ const int MaxListItems = 10;
 
 static bool IsWithinSizeLimits(SaveResultRequest request, out string? error)
 {
-    if (request.VerdictHeading.Length > MaxShortFieldLength
-        || request.VerdictBody.Length > MaxLongFieldLength
+    // Every length check below uses `?.Length ?? 0` even on fields typed as
+    // non-nullable `string` in C# — JSON body binding doesn't enforce that
+    // annotation at runtime (RespectNullableAnnotations isn't enabled), so a
+    // caller that omits a "required" property (or bypasses the frontend
+    // entirely) can still produce an actual null here. This function runs
+    // before the endpoint's try/catch, so a raw `.Length` on a null would
+    // throw an unhandled NullReferenceException instead of the clean 400
+    // this function exists to return.
+    if ((request.VerdictHeading?.Length ?? 0) > MaxShortFieldLength
+        || (request.VerdictBody?.Length ?? 0) > MaxLongFieldLength
         || (request.AdviceFactorLabel?.Length ?? 0) > MaxShortFieldLength
-        || (request.AdviceText?.Length ?? 0) > MaxLongFieldLength)
+        || (request.AdviceText?.Length ?? 0) > MaxLongFieldLength
+        || (request.Profile?.Country?.Length ?? 0) > MaxShortFieldLength
+        || (request.Profile?.Age?.Length ?? 0) > MaxShortFieldLength
+        || (request.Profile?.OccupationField?.Length ?? 0) > MaxShortFieldLength)
     {
         error = "One or more fields is too long.";
         return false;
@@ -185,15 +244,19 @@ static bool IsWithinSizeLimits(SaveResultRequest request, out string? error)
 
     var pathFit = request.PathFit ?? [];
     var documentChecklist = request.DocumentChecklist ?? [];
+    var germanyConnection = request.Profile?.GermanyConnection ?? [];
+    var eligibilityChecks = request.EligibilityChecks ?? [];
 
-    if (pathFit.Count > MaxListItems || documentChecklist.Count > MaxListItems)
+    if (pathFit.Count > MaxListItems || documentChecklist.Count > MaxListItems
+        || germanyConnection.Count > MaxListItems || eligibilityChecks.Count > MaxListItems)
     {
         error = "Too many items in the request.";
         return false;
     }
 
-    if (pathFit.Any(f => f.PathLabel.Length > MaxShortFieldLength || f.FitLabel.Length > MaxShortFieldLength)
-        || documentChecklist.Any(item => item.Length > MaxLongFieldLength))
+    if (pathFit.Any(f => (f.PathLabel?.Length ?? 0) > MaxShortFieldLength || (f.FitLabel?.Length ?? 0) > MaxShortFieldLength)
+        || documentChecklist.Any(item => (item?.Length ?? 0) > MaxLongFieldLength)
+        || eligibilityChecks.Any(c => (c.Label?.Length ?? 0) > MaxShortFieldLength || (c.Explanation?.Length ?? 0) > MaxLongFieldLength))
     {
         error = "One or more fields is too long.";
         return false;
@@ -272,6 +335,35 @@ static string BuildResultEmailHtml(SaveResultRequest request, IConfiguration con
         sb.Append("</td></tr>");
     }
 
+    // Requirements-based eligibility check — see Matching-Algorithm-Study.md §7
+    var eligibilityChecks = request.EligibilityChecks ?? [];
+    if (eligibilityChecks.Count > 0)
+    {
+        sb.Append("<tr><td style=\"padding:0 32px 24px;border-top:1px solid #f1f5f9;padding-top:24px;\">");
+        sb.Append("<p style=\"margin:0 0 4px;font-size:14px;font-weight:700;color:#0f172a;\">How you compare against the real requirements</p>");
+        sb.Append("<p style=\"margin:0 0 14px;font-size:11px;color:#94a3b8;\">Based on Germany&rsquo;s own official admission/visa requirements for this path.</p>");
+
+        foreach (var check in eligibilityChecks)
+        {
+            var (badgeBg, badgeColor, badgeLabel) = check.Status switch
+            {
+                EligibilityCheckStatus.Met => ("#ecfdf5", "#047857", "Met"),
+                EligibilityCheckStatus.Fixed => ("#eff6ff", "#1d4ed8", "Extra step needed"),
+                _ => ("#fffbeb", "#b45309", "You&rsquo;ll need this"),
+            };
+
+            sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-bottom:10px;border:1px solid #e2e8f0;border-radius:16px;\"><tr><td style=\"padding:12px 16px;\">");
+            sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr>");
+            sb.Append($"<td style=\"font-size:13px;font-weight:600;color:#0f172a;\">{Encode(check.Label)}</td>");
+            sb.Append($"<td align=\"right\"><span style=\"display:inline-block;padding:3px 10px;border-radius:999px;background:{badgeBg};color:{badgeColor};font-size:11px;font-weight:700;\">{badgeLabel}</span></td>");
+            sb.Append("</tr></table>");
+            sb.Append($"<p style=\"margin:6px 0 0;font-size:12px;line-height:1.6;color:#475569;\">{Encode(check.Explanation)}</p>");
+            sb.Append("</td></tr></table>");
+        }
+
+        sb.Append("</td></tr>");
+    }
+
     // Improvement advice
     if (!string.IsNullOrWhiteSpace(request.AdviceText))
     {
@@ -333,6 +425,35 @@ static string BuildResultEmailHtml(SaveResultRequest request, IConfiguration con
 
 record PathFitEntry(string PathLabel, string FitLabel, int BarPercent, bool Highlighted);
 
+enum EligibilityCheckStatus
+{
+    Met,
+    Addressable,
+    Fixed,
+}
+
+record EligibilityCheckEntry(string Label, EligibilityCheckStatus Status, string Explanation);
+
+// Tier 1 profile snapshot, sent alongside the display data on email capture.
+// All nullable — the profile may be partial, and this is self-reported data
+// with no verification (see the comment on Models/User.cs for the planned
+// verification levels this deliberately does not attempt yet).
+record ProfileSnapshot(
+    string? Country,
+    string? Age,
+    EducationLevel? HighestEducation,
+    string? OccupationField,
+    WorkExperience? WorkExperience,
+    DesiredPath? DesiredPath,
+    LanguageLevel? GermanLevel,
+    LanguageLevel? EnglishLevel,
+    LanguageCertificateStatus? LanguageCertificate,
+    PassportStatus? PassportStatus,
+    List<GermanyConnection>? GermanyConnection,
+    FinancialSituation? FinancialSituation,
+    StartTimeline? StartTimeline,
+    RegionFlexibility? RegionFlexibility);
+
 record SaveResultRequest(
     string Email,
     string VerdictHeading,
@@ -341,6 +462,8 @@ record SaveResultRequest(
     string? AdviceText,
     List<PathFitEntry> PathFit,
     List<string> DocumentChecklist,
-    string? ContinueUrl);
+    string? ContinueUrl,
+    ProfileSnapshot? Profile,
+    List<EligibilityCheckEntry>? EligibilityChecks);
 
 record SaveResultResponse(bool Saved, bool EmailSent);

@@ -8,8 +8,17 @@ namespace Novira.Backend.Data;
 // sync/university curation once the approve/deny flow itself is validated.
 // OccupationField values match frontend/src/types/assessment.ts's
 // OccupationField string keys, since that's the shared matching vocabulary.
+//
+// Dates are computed relative to seed time (MonthsFromNow), not hardcoded
+// absolutes — MatchingService hard-excludes opportunities whose
+// ApplicationDeadline has already passed, so fixed calendar dates silently
+// go stale and every seeded entry stops matching once "now" catches up to
+// them (found 2026-08-06, while first testing the matcher against this seeder).
 public static class OpportunitySeeder
 {
+    private static DateOnly MonthsFromNow(int months) =>
+        DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(months);
+
     public static async Task SeedIfEmptyAsync(AppDbContext db)
     {
         if (await db.Opportunities.AnyAsync())
@@ -32,8 +41,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 MonthlyCompensationEur = 950,
-                StartDate = new DateOnly(2026, 9, 1),
-                ApplicationDeadline = new DateOnly(2026, 5, 31),
+                StartDate = MonthsFromNow(2),
+                ApplicationDeadline = MonthsFromNow(1),
             },
             new()
             {
@@ -48,8 +57,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = false,
                 MinEducationLevel = EducationLevel.HighSchool,
                 MonthlyCompensationEur = 850,
-                StartDate = new DateOnly(2026, 8, 1),
-                ApplicationDeadline = new DateOnly(2026, 5, 15),
+                StartDate = MonthsFromNow(1),
+                ApplicationDeadline = MonthsFromNow(1),
             },
             new()
             {
@@ -65,8 +74,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 MonthlyCompensationEur = 1050,
-                StartDate = new DateOnly(2026, 9, 1),
-                ApplicationDeadline = new DateOnly(2026, 6, 30),
+                StartDate = MonthsFromNow(2),
+                ApplicationDeadline = MonthsFromNow(2),
             },
             new()
             {
@@ -81,8 +90,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 MonthlyCompensationEur = 1100,
-                StartDate = new DateOnly(2026, 10, 1),
-                ApplicationDeadline = new DateOnly(2026, 7, 31),
+                StartDate = MonthsFromNow(3),
+                ApplicationDeadline = MonthsFromNow(2),
             },
             new()
             {
@@ -97,8 +106,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 MonthlyCompensationEur = 980,
-                StartDate = new DateOnly(2026, 9, 1),
-                ApplicationDeadline = new DateOnly(2026, 6, 15),
+                StartDate = MonthsFromNow(2),
+                ApplicationDeadline = MonthsFromNow(1),
             },
             new()
             {
@@ -114,8 +123,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 TuitionFeeEur = 0,
-                StartDate = new DateOnly(2026, 10, 1),
-                ApplicationDeadline = new DateOnly(2026, 7, 15),
+                StartDate = MonthsFromNow(3),
+                ApplicationDeadline = MonthsFromNow(2),
             },
             new()
             {
@@ -130,8 +139,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 TuitionFeeEur = 0,
-                StartDate = new DateOnly(2026, 10, 1),
-                ApplicationDeadline = new DateOnly(2026, 7, 15),
+                StartDate = MonthsFromNow(3),
+                ApplicationDeadline = MonthsFromNow(2),
             },
             new()
             {
@@ -146,8 +155,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 TuitionFeeEur = 500,
-                StartDate = new DateOnly(2026, 10, 1),
-                ApplicationDeadline = new DateOnly(2026, 6, 30),
+                StartDate = MonthsFromNow(3),
+                ApplicationDeadline = MonthsFromNow(1),
             },
             new()
             {
@@ -162,8 +171,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.Bachelors,
                 TuitionFeeEur = 0,
-                StartDate = new DateOnly(2026, 10, 1),
-                ApplicationDeadline = new DateOnly(2026, 7, 1),
+                StartDate = MonthsFromNow(3),
+                ApplicationDeadline = MonthsFromNow(1),
             },
             new()
             {
@@ -178,8 +187,8 @@ public static class OpportunitySeeder
                 RequiresCertifiedLanguageProof = true,
                 MinEducationLevel = EducationLevel.HighSchool,
                 TuitionFeeEur = 0,
-                StartDate = new DateOnly(2026, 10, 1),
-                ApplicationDeadline = new DateOnly(2026, 7, 15),
+                StartDate = MonthsFromNow(3),
+                ApplicationDeadline = MonthsFromNow(2),
             },
         };
 

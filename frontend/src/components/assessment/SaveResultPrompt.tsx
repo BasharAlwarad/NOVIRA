@@ -2,7 +2,18 @@
 
 import { useState } from 'react';
 import { RateLimitedError, saveResult } from '@/lib/api/leads';
-import type { PathFitEntry } from '@/lib/contracts/leads';
+import type {
+  EligibilityCheckStatus,
+  PathFitEntry,
+  ProfileSnapshot,
+} from '@/lib/contracts/leads';
+import type { RequirementCheck, RequirementStatus } from '@/lib/eligibility-check';
+
+const ELIGIBILITY_STATUS_MAP: Record<RequirementStatus, EligibilityCheckStatus> = {
+  met: 'Met',
+  addressable: 'Addressable',
+  fixed: 'Fixed',
+};
 
 interface SaveResultPromptProps {
   verdictHeading: string;
@@ -11,6 +22,8 @@ interface SaveResultPromptProps {
   adviceText: string | null;
   pathFit: PathFitEntry[];
   documentChecklist: string[];
+  profile: ProfileSnapshot;
+  eligibilityChecks: RequirementCheck[];
 }
 
 type PromptState =
@@ -28,6 +41,8 @@ export function SaveResultPrompt({
   adviceText,
   pathFit,
   documentChecklist,
+  profile,
+  eligibilityChecks,
 }: SaveResultPromptProps) {
   const [state, setState] = useState<PromptState>('idle');
   const [email, setEmail] = useState('');
@@ -63,6 +78,12 @@ export function SaveResultPrompt({
         pathFit,
         documentChecklist,
         continueUrl: `${window.location.origin}/assessment/result`,
+        profile,
+        eligibilityChecks: eligibilityChecks.map((check) => ({
+          label: check.label,
+          status: ELIGIBILITY_STATUS_MAP[check.status],
+          explanation: check.explanation,
+        })),
       });
       setEmailSent(response.emailSent);
       setState('success');

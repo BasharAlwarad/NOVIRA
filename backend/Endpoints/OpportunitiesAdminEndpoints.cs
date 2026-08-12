@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
 using Novira.Backend.Models;
+using Novira.Backend.Services;
 
 namespace Novira.Backend.Endpoints;
 
@@ -68,6 +69,15 @@ public static class OpportunitiesAdminEndpoints
             await db.SaveChangesAsync();
 
             return Results.Ok(ToResponse(opportunity));
+        });
+
+        // Manually triggered — not a background job (see the class comment
+        // on OpportunitySyncService). Synced rows land as Pending, same
+        // review as the fake seed data; nothing here is auto-published.
+        group.MapPost("/sync-ausbildung", async (OpportunitySyncService syncService) =>
+        {
+            var added = await syncService.SyncAusbildungAsync();
+            return Results.Ok(new { added });
         });
     }
 }

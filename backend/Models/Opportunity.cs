@@ -19,20 +19,51 @@ public enum OpportunitySource
     Bundesagentur,
 }
 
-// Mirrors frontend/src/types/assessment.ts LanguageLevel, but with corrected
-// CEFR ordering. The frontend declares "Beginner" last, after C1Plus, which
-// is fine for a TS string enum but would silently break ordinal
-// (userLevel >= requiredLevel) comparisons here if copied verbatim.
+// Mirrors frontend/src/types/assessment.ts LanguageLevel, corrected in two
+// ways the frontend's plain string enum can't express:
+// 1. Ordering — the frontend declares "Beginner" last, after C1Plus, which
+//    would silently break ordinal (userLevel >= requiredLevel) comparisons
+//    if copied verbatim.
+// 2. Cross-scale interleaving — the frontend actually uses TWO disjoint
+//    subsets of this enum for two different questions: `germanLevel` only
+//    ever offers the CEFR options (None/A1/A2/B1/B2/C1/C1Plus), while
+//    `englishLevel` only ever offers the casual options
+//    (Beginner/Intermediate/Advanced/Fluent) — the two scales never mix on
+//    the frontend. But Opportunity.RequiredEnglishLevel needs to be
+//    comparable against a user's self-reported (casual-scale) English
+//    level, and real opportunity data states English requirements in CEFR
+//    terms (e.g. DAAD listings say "English B2"). So the casual terms are
+//    interleaved near their commonly-accepted CEFR equivalent
+//    (Beginner≈A1, Intermediate≈B1, Advanced≈C1) — deliberately NOT
+//    aliased to the exact same integer value as a same-named approach
+//    might suggest, because C# resolves an enum value back to a name using
+//    whichever member was declared first for that value, so a stored
+//    EnglishLevel.Beginner could round-trip out of the database as "A1"
+//    instead of "Beginner" if the two shared a value. Every member here has
+//    a unique value; the interleaving is an approximation for ordinal
+//    comparison, not an official mapping — revisit if it proves too coarse.
+//
+// WARNING: Postgres stores enum columns as raw integers (RequiredGermanLevel,
+// RequiredEnglishLevel on Opportunity; GermanLevel, EnglishLevel on User).
+// Changing a member's underlying value here silently reinterprets every
+// already-persisted row under the new numbering — there is no migration
+// that fixes this automatically. If you renumber this enum, clear and
+// reseed Opportunities (OpportunitySeeder only seeds an empty table) and
+// re-capture or fix any User rows with these fields set. This bit us once
+// already (2026-08-06) when Intermediate/Advanced/Fluent were added.
 public enum LanguageLevel
 {
     None = 0,
-    Beginner = 1,
-    A1 = 2,
+    A1 = 1,
+    Beginner = 2,
     A2 = 3,
     B1 = 4,
-    B2 = 5,
-    C1 = 6,
-    C1Plus = 7,
+    Intermediate = 5,
+    B2 = 6,
+    C1 = 7,
+    Advanced = 8,
+    C1Plus = 9,
+    Fluent = 10, // near-native — top of the scale
 }
 
 // Mirrors frontend/src/types/assessment.ts EducationLevel exactly (declaration order preserved).

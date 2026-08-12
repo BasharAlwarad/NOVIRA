@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { DocumentChecklist } from '@/components/assessment/DocumentChecklist';
+import { EligibilityChecklist } from '@/components/assessment/EligibilityChecklist';
 import { PathFitChart } from '@/components/assessment/PathFitChart';
-import { PlaceholderOpportunityCounts } from '@/components/assessment/PlaceholderOpportunityCounts';
+import { OpportunityCounts } from '@/components/assessment/OpportunityCounts';
 import { ProfileImprovementAdvice } from '@/components/assessment/ProfileImprovementAdvice';
 import { SaveResultPrompt } from '@/components/assessment/SaveResultPrompt';
 import { SiteFooter } from '@/components/site-footer';
@@ -17,6 +18,8 @@ import {
   type VerdictOutcome,
 } from '@/lib/assessment-verdict';
 import { loadAssessment } from '@/lib/assessment-storage';
+import { checkEligibility } from '@/lib/eligibility-check';
+import { buildProfileSnapshot } from '@/lib/profile-snapshot';
 import {
   FIT_LABELS,
   FIT_WIDTH,
@@ -147,6 +150,8 @@ export default function AssessmentResultPage() {
       highlighted: score.path === highlightedPath,
     }));
   const documentChecklist = [...getDocumentChecklistItems(highlightedPath)];
+  const profile = buildProfileSnapshot(answers);
+  const eligibilityChecks = checkEligibility(answers, highlightedPath ?? relevantScore.path);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -171,6 +176,12 @@ export default function AssessmentResultPage() {
             />
           </div>
 
+          {eligibilityChecks && (
+            <div className="mt-8 border-t border-slate-100 pt-6">
+              <EligibilityChecklist checks={eligibilityChecks} />
+            </div>
+          )}
+
           <div className="mt-8 border-t border-slate-100 pt-6">
             <ProfileImprovementAdvice score={relevantScore} />
           </div>
@@ -187,11 +198,13 @@ export default function AssessmentResultPage() {
               adviceText={advice?.advice ?? null}
               pathFit={pathFit}
               documentChecklist={documentChecklist}
+              profile={profile}
+              eligibilityChecks={eligibilityChecks ?? []}
             />
           </div>
 
           <div className="mt-8 border-t border-slate-100 pt-6">
-            <PlaceholderOpportunityCounts />
+            <OpportunityCounts profile={profile} />
           </div>
         </div>
       </section>

@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}\\\\n' 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?angebotsart=4&wo=Berlin&size=3' -H 'X-API-Key: jobboerse-jobsuche' -H 'Accept: application/json')",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s -m 15 -w '\\\\nSTATUS:%{http_code}\\\\n' 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?angebotsart=1&wo=Berlin&umkreis=200&page=1&size=3' -H 'X-API-Key: jobboerse-jobsuche')",
+      "Bash(curl -s -m 15 -w '\\\\nSTATUS:%{http_code}\\\\n' 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v6/jobs?angebotsart=1&wo=Berlin&umkreis=200&page=1&size=3' -H 'X-API-Key: jobboerse-jobsuche')",
+      "Bash(curl -s -m 15 -w '\\\\nSTATUS:%{http_code}\\\\n' 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v6/jobs?angebotsart=4&size=2' -H 'X-API-Key: jobboerse-jobsuche')",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 10220 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(node -e ' *)",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 17968 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(curl -s -X POST \"http://localhost:5080/admin/opportunities/sync-ausbildung\" -H \"X-Admin-Key: 123\" -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
+      "Bash(powershell -NoProfile -Command \"Stop-Process -Id 23128 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(netstat -ano)",
+      "Bash(dotnet run *)",
+      "Bash(echo \"started with pid $!\")",
+      "Bash(curl -s -H \"X-Admin-Key: 123\" \"http://localhost:5080/admin/opportunities\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -X POST http://localhost:5080/opportunity-counts -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(curl -s -X POST http://localhost:3000/api/opportunity-counts -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(node verify/opportunity-counts.mjs)",
+      "Bash(taskkill //PID 25292 //F)",
+      "Bash(curl -s -m 3 http://localhost:5080/)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(echo \"started wrapper pid $!\")"
+    ]
+  }
+}

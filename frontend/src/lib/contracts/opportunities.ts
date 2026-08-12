@@ -2,18 +2,24 @@ export type OpportunityPath = 'University' | 'Ausbildung';
 export type OpportunityStatus = 'Pending' | 'Approved' | 'Denied';
 export type OpportunitySource = 'Manual' | 'Bundesagentur';
 
-// Mirrors backend/Models/Opportunity.cs's LanguageLevel — CEFR order, with
-// "Beginner" ranked near the bottom (see the backend enum's comment for why
-// this differs from the frontend's own assessment LanguageLevel declaration order).
+// Mirrors backend/Models/Opportunity.cs's LanguageLevel — CEFR values plus
+// the frontend's casual englishLevel scale (Beginner/Intermediate/Advanced/
+// Fluent) interleaved near their approximate CEFR equivalent, in corrected
+// ordinal order (see the backend enum's comment for the full reasoning —
+// the frontend's own assessment LanguageLevel declares these in a different,
+// non-ordinal order across two disjoint question option sets).
 export type OpportunityLanguageLevel =
   | 'None'
-  | 'Beginner'
   | 'A1'
+  | 'Beginner'
   | 'A2'
   | 'B1'
+  | 'Intermediate'
   | 'B2'
   | 'C1'
-  | 'C1Plus';
+  | 'Advanced'
+  | 'C1Plus'
+  | 'Fluent';
 
 export type OpportunityEducationLevel =
   | 'HighSchool'
