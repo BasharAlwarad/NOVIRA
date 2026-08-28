@@ -14,4 +14,12 @@ public class MagicLinkToken
     public DateTime ExpiresAt { get; set; }
     public DateTime? UsedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // The profile snapshot from /auth/request-link, held here — not written
+    // onto the User row — until the token is actually consumed at
+    // /auth/verify. This is the fix for a real vulnerability (found in code
+    // review 2026-08-28): applying it at request time let anyone who merely
+    // knows a victim's email silently overwrite their stored profile
+    // without ever proving they own that inbox. JSON-serialized ProfileSnapshot.
+    public string? PendingProfileJson { get; set; }
 }

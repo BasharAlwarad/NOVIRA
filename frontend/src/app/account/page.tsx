@@ -434,10 +434,10 @@ export default function AccountPage() {
                 You&apos;re not signed in, or your sign-in link has expired.
               </p>
               <Link
-                href="/assessment/result"
+                href="/signin"
                 className="mt-4 inline-flex h-11 items-center justify-center rounded-full bg-emerald-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
               >
-                Back to my result
+                Sign in
               </Link>
             </div>
           )}

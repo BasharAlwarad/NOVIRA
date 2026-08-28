@@ -108,19 +108,37 @@ export function SiteNav() {
               </Link>
             </>
           )}
+          {signedIn === false && (
+            <Link
+              href="/signin"
+              className="text-sm font-medium text-slate-300 transition hover:text-white"
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
 
-        <Link
-          href={signedIn ? '/account' : '/assessment'}
-          className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300 md:hidden"
-        >
-          {signedIn ? 'My account' : 'Start questionnaire'}
-          {signedIn && unreadCount > 0 && (
-            <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-950/20 px-1 text-[10px] font-bold text-slate-950">
-              {unreadCount}
-            </span>
+        <div className="flex items-center gap-3 md:hidden">
+          {signedIn === false && (
+            <Link
+              href="/signin"
+              className="text-sm font-medium text-slate-300 transition hover:text-white"
+            >
+              Sign in
+            </Link>
           )}
-        </Link>
+          <Link
+            href={signedIn ? '/account' : '/assessment'}
+            className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+          >
+            {signedIn ? 'My account' : 'Start questionnaire'}
+            {signedIn && unreadCount > 0 && (
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-950/20 px-1 text-[10px] font-bold text-slate-950">
+                {unreadCount}
+              </span>
+            )}
+          </Link>
+        </div>
       </div>
     </header>
   );

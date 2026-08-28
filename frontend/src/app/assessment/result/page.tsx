@@ -131,6 +131,12 @@ export default function AssessmentResultPage() {
           >
             Start the assessment
           </Link>
+          <p className="mt-4 text-sm text-slate-500">
+            Already have an account?{' '}
+            <Link href="/signin" className="font-semibold text-emerald-700 underline underline-offset-2">
+              Sign in
+            </Link>
+          </p>
         </section>
         <SiteFooter />
       </main>

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Net.Mail;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
@@ -12,14 +13,23 @@ namespace Novira.Backend.Endpoints;
 
 // Profile is optional — verifying an email doesn't require a completed
 // assessment — but when it's present (the normal case: requesting a link
-// straight off the result page, same as /leads), it's captured onto the
-// Users row the same way /leads does. Without this, a user who signs up
-// via SignupPrompt without ever using SaveResultPrompt first would land
-// on a Users row with an empty profile, which then makes /matches'
-// MatchingService hard filters correctly find nothing — a real bug fixed
-// alongside this (2026-08-16): /opportunity-counts recomputes counts fresh
-// from the in-browser answers every time, so it looked fine even though
-// the persisted row backing /matches was empty.
+// straight off the result page, same as /leads), it eventually gets
+// captured onto the Users row the same way /leads does. Without this, a
+// user who signs up via SignupPrompt without ever using SaveResultPrompt
+// first would land on a Users row with an empty profile, which then makes
+// /matches' MatchingService hard filters correctly find nothing — a real
+// bug fixed 2026-08-16: /opportunity-counts recomputes counts fresh from
+// the in-browser answers every time, so it looked fine even though the
+// persisted row backing /matches was empty.
+//
+// IMPORTANT (fixed 2026-08-28, found in code review): the profile is NOT
+// applied to the User row here. It's held on the MagicLinkToken
+// (PendingProfileJson) and only applied inside /auth/verify, after the
+// token has actually been consumed — i.e. after whoever clicked the link
+// has proven they own the inbox it was emailed to. The original version
+// applied it immediately at request time, which meant anyone who merely
+// knew a victim's email could silently overwrite their stored profile
+// (feeding real /matches results) without ever proving ownership.
 public record RequestLinkRequest(string Email, ProfileSnapshot? Profile);
 public record RequestLinkResponse(bool EmailSent);
 public record VerifyRequest(string Token);
@@ -80,33 +90,8 @@ public static class AuthEndpoints
                 {
                     user = new User { Email = normalizedEmail };
                     db.Users.Add(user);
+                    await db.SaveChangesAsync();
                 }
-
-                // Same overwrite-on-every-capture semantics as /leads — keeps
-                // the persisted profile snapshot current if the visitor redid
-                // the assessment since the last time they signed in/up, and
-                // is what makes /matches' hard filters have anything to match
-                // against at all for a user who never went through /leads.
-                if (request.Profile is { } profile)
-                {
-                    user.Country = profile.Country;
-                    user.Age = profile.Age;
-                    user.HighestEducation = profile.HighestEducation;
-                    user.OccupationField = profile.OccupationField;
-                    user.WorkExperience = profile.WorkExperience;
-                    user.DesiredPath = profile.DesiredPath;
-                    user.GermanLevel = profile.GermanLevel;
-                    user.EnglishLevel = profile.EnglishLevel;
-                    user.LanguageCertificate = profile.LanguageCertificate;
-                    user.PassportStatus = profile.PassportStatus;
-                    user.GermanyConnection = profile.GermanyConnection;
-                    user.FinancialSituation = profile.FinancialSituation;
-                    user.StartTimeline = profile.StartTimeline;
-                    user.RegionFlexibility = profile.RegionFlexibility;
-                    user.ProfileUpdatedAt = DateTime.UtcNow;
-                }
-
-                await db.SaveChangesAsync();
 
                 // Only the most recently requested link should ever work —
                 // invalidate anything still outstanding for this user.
@@ -115,12 +100,18 @@ public static class AuthEndpoints
                     .ToListAsync();
                 db.MagicLinkTokens.RemoveRange(priorTokens);
 
+                // The profile is deliberately NOT written to `user` here —
+                // see the doc comment on RequestLinkRequest above. It rides
+                // along on the token and is only applied once the token is
+                // actually consumed at /auth/verify, after ownership of this
+                // inbox is proven.
                 var rawToken = TokenGenerator.GenerateRawToken();
                 db.MagicLinkTokens.Add(new MagicLinkToken
                 {
                     UserId = user.Id,
                     TokenHash = TokenGenerator.Hash(rawToken),
                     ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+                    PendingProfileJson = request.Profile is { } profile ? JsonSerializer.Serialize(profile) : null,
                 });
                 await db.SaveChangesAsync();
 
@@ -195,6 +186,35 @@ public static class AuthEndpoints
             if (user is null)
             {
                 return Results.BadRequest(new { message = "This link is invalid or has expired." });
+            }
+
+            // The trust boundary this token exists for: ownership of the
+            // inbox is now proven (the atomic claim above succeeded), so the
+            // profile snapshot that rode along with the request can now
+            // safely be applied — same overwrite-on-every-capture semantics
+            // as /leads, just deferred to this point instead of request time
+            // (see the doc comment on RequestLinkRequest for why).
+            if (!string.IsNullOrWhiteSpace(magicLinkToken.PendingProfileJson))
+            {
+                var profile = JsonSerializer.Deserialize<ProfileSnapshot>(magicLinkToken.PendingProfileJson);
+                if (profile is not null)
+                {
+                    user.Country = profile.Country;
+                    user.Age = profile.Age;
+                    user.HighestEducation = profile.HighestEducation;
+                    user.OccupationField = profile.OccupationField;
+                    user.WorkExperience = profile.WorkExperience;
+                    user.DesiredPath = profile.DesiredPath;
+                    user.GermanLevel = profile.GermanLevel;
+                    user.EnglishLevel = profile.EnglishLevel;
+                    user.LanguageCertificate = profile.LanguageCertificate;
+                    user.PassportStatus = profile.PassportStatus;
+                    user.GermanyConnection = profile.GermanyConnection;
+                    user.FinancialSituation = profile.FinancialSituation;
+                    user.StartTimeline = profile.StartTimeline;
+                    user.RegionFlexibility = profile.RegionFlexibility;
+                    user.ProfileUpdatedAt = DateTime.UtcNow;
+                }
             }
 
             var rawSessionToken = TokenGenerator.GenerateRawToken();

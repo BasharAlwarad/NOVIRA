@@ -71,14 +71,14 @@ function AuthVerifyContent() {
               This link is invalid or has expired
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Sign-in links only work once and expire after 15 minutes. Go
-              back to your result and request a new one.
+              Sign-in links only work once and expire after 15 minutes.
+              Request a new one.
             </p>
             <Link
-              href="/assessment/result"
+              href="/signin"
               className="mt-6 inline-flex h-12 items-center justify-center rounded-full bg-emerald-400 px-6 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
             >
-              Back to my result
+              Sign in again
             </Link>
           </div>
         )}

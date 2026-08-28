@@ -137,7 +137,19 @@
       "Bash(sed -n '8308,8484p' full.diff)",
       "Bash(sed -n '8082,8110p' full.diff)",
       "Bash(sed -n '9138,9166p' full.diff)",
-      "Bash(sed -n '9451,9476p' full.diff)"
+      "Bash(sed -n '9451,9476p' full.diff)",
+      "Bash(git checkout *)",
+      "PowerShell(Stop-Process -Id 6848 -Force)",
+      "Bash(curl -s -X POST http://localhost:5080/auth/request-link -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(curl -s http://localhost:5080/admin/users/c3e77d1d-b2e3-4e88-88ce-18a31d1720c1 -H 'X-Admin-Key: 123')",
+      "Bash(curl -s -X DELETE http://localhost:5080/admin/users/c3e77d1d-b2e3-4e88-88ce-18a31d1720c1 -H 'X-Admin-Key: 123' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s \"http://localhost:5080/admin/users?search=verify-security-fix\" -H \"X-Admin-Key: 123\")",
+      "Bash(node verify/signin-gap.mjs)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/request-link -H 'Content-Type: application/json' -d '{\"email\":\"verify-signin-gap@example.com\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(node verify/signin-gap-debug.mjs)",
+      "Bash(node verify/signin-gap-full.mjs \"OUeILJG64KDK1OI0jtWcXMT1VvgJ1L6Nt2ijtU0MqWw\")",
+      "Bash(curl -s \"http://localhost:5080/admin/opportunities\" -H \"X-Admin-Key: 123\")",
+      "Bash(curl -s \"http://localhost:5080/admin/users?search=verify-signin-gap\" -H \"X-Admin-Key: 123\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude",
