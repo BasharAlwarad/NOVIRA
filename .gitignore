@@ -11,3 +11,4 @@ backend/obj/
 *.suo
 *.swp
 .DS_Store
+.env

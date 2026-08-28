@@ -8,6 +8,7 @@ import { PathFitChart } from '@/components/assessment/PathFitChart';
 import { OpportunityCounts } from '@/components/assessment/OpportunityCounts';
 import { ProfileImprovementAdvice } from '@/components/assessment/ProfileImprovementAdvice';
 import { SaveResultPrompt } from '@/components/assessment/SaveResultPrompt';
+import { SignupPrompt } from '@/components/assessment/SignupPrompt';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import {
@@ -149,7 +150,9 @@ export default function AssessmentResultPage() {
       barPercent: FIT_WIDTH[score.fit],
       highlighted: score.path === highlightedPath,
     }));
-  const documentChecklist = [...getDocumentChecklistItems(highlightedPath)];
+  const documentChecklist = [
+    ...getDocumentChecklistItems(highlightedPath, answers.country || null),
+  ];
   const profile = buildProfileSnapshot(answers);
   const eligibilityChecks = checkEligibility(answers, highlightedPath ?? relevantScore.path);
 
@@ -187,7 +190,10 @@ export default function AssessmentResultPage() {
           </div>
 
           <div className="mt-8 border-t border-slate-100 pt-6">
-            <DocumentChecklist highlightedPath={highlightedPath} />
+            <DocumentChecklist
+              highlightedPath={highlightedPath}
+              country={answers.country || null}
+            />
           </div>
 
           <div className="mt-8 border-t border-slate-100 pt-6">
@@ -205,6 +211,10 @@ export default function AssessmentResultPage() {
 
           <div className="mt-8 border-t border-slate-100 pt-6">
             <OpportunityCounts profile={profile} />
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <SignupPrompt profile={profile} />
           </div>
         </div>
       </section>

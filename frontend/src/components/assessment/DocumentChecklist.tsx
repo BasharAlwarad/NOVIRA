@@ -3,10 +3,11 @@ import { getDocumentChecklistItems } from '@/lib/result-display';
 
 interface DocumentChecklistProps {
   highlightedPath: EvaluablePath | null;
+  country: string | null;
 }
 
-export function DocumentChecklist({ highlightedPath }: DocumentChecklistProps) {
-  const items = getDocumentChecklistItems(highlightedPath);
+export function DocumentChecklist({ highlightedPath, country }: DocumentChecklistProps) {
+  const items = getDocumentChecklistItems(highlightedPath, country);
 
   return (
     <div>

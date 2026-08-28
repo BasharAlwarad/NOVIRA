@@ -8,6 +8,8 @@
     <UserSecretsId>506442c5-2984-4d54-b8f7-c609d1b7ae7c</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.40.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

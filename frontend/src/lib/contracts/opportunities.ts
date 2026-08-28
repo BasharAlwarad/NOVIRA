@@ -28,6 +28,28 @@ export type OpportunityEducationLevel =
   | 'Masters'
   | 'Doctorate';
 
+// The manual-curation counterpart to the Ausbildung sync — for sources with
+// no API (currently: all University data). Source/Status are always
+// Manual/Pending server-side, not accepted from the client — see
+// backend/Endpoints/OpportunitiesAdminEndpoints.cs's CreateOpportunityRequest.
+export interface CreateOpportunityRequest {
+  title: string;
+  provider: string;
+  path: OpportunityPath;
+  location: string | null;
+  description: string | null;
+  sourceUrl: string | null;
+  occupationField: string | null;
+  requiredGermanLevel: OpportunityLanguageLevel | null;
+  requiredEnglishLevel: OpportunityLanguageLevel | null;
+  requiresCertifiedLanguageProof: boolean;
+  minEducationLevel: OpportunityEducationLevel | null;
+  monthlyCompensationEur: number | null;
+  tuitionFeeEur: number | null;
+  startDate: string | null;
+  applicationDeadline: string | null;
+}
+
 export interface Opportunity {
   id: string;
   title: string;

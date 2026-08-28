@@ -22,6 +22,68 @@ namespace Novira.Backend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Novira.Backend.Models.MagicLinkToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("MagicLinkTokens");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Messages");
+                });
+
             modelBuilder.Entity("Novira.Backend.Models.Opportunity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -95,6 +157,35 @@ namespace Novira.Backend.Migrations
                     b.ToTable("Opportunities");
                 });
 
+            modelBuilder.Entity("Novira.Backend.Models.Session", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Sessions");
+                });
+
             modelBuilder.Entity("Novira.Backend.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -122,6 +213,15 @@ namespace Novira.Backend.Migrations
 
                     b.Property<int?>("FinancialSituation")
                         .HasColumnType("integer");
+
+                    b.Property<string>("FraudFlagNote")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("FraudFlagged")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("FraudFlaggedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("FullName")
                         .HasColumnType("text");
@@ -153,6 +253,39 @@ namespace Novira.Backend.Migrations
                     b.Property<int?>("StartTimeline")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("VerifiedDataUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifiedDateOfBirth")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("VerifiedEnglishLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VerifiedFieldOfStudy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VerifiedFullName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("VerifiedGermanLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("VerifiedHighestEducation")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VerifiedNationality")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VerifiedPassportExpiryDate")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VerifiedPassportNumber")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("VerifiedPassportStatus")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("WorkExperience")
                         .HasColumnType("integer");
 
@@ -162,6 +295,112 @@ namespace Novira.Backend.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.UserDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AiExtractedDataJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AiExtractedName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AiFlagsJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("AiNameMatchesProfile")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("AiSummary")
+                        .HasColumnType("text");
+
+                    b.Property<int>("AiVerificationStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("AiVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DocumentType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("RejectionMessageSent")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReviewNote")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ReviewStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StorageBlobName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserDocuments");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.MagicLinkToken", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.Message", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.Session", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.UserDocument", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

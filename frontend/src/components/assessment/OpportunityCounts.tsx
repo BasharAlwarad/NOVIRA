@@ -19,7 +19,8 @@ type LoadState =
  * (admin-approved) opportunities database via MatchingService — replaces
  * the old PlaceholderOpportunityCounts mock. Counts only, no names/details:
  * the staged reveal from Plan.md §4 gates opportunity details behind
- * account signup, which doesn't exist yet.
+ * account signup — see SignupPrompt.tsx, rendered right after this
+ * component, for the actual working CTA.
  *
  * No "Job openings" card — jobs/employment matching is out of scope
  * everywhere else in the app (see CLAUDE.md), so showing a count here would
@@ -102,7 +103,7 @@ export function OpportunityCounts({ profile }: OpportunityCountsProps) {
           </div>
           <p className="mt-3 text-xs text-slate-500">
             Matched against your self-reported answers — not yet verified by
-            us. Sign up to see the actual opportunities.
+            us.
           </p>
         </>
       )}

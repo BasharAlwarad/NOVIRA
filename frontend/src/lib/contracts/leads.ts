@@ -75,6 +75,25 @@ export interface ProfileSnapshot {
   regionFlexibility: ProfileRegionFlexibility | null;
 }
 
+// Level 3 of the four-level user-data model — populated only once an admin
+// approves a document that contained this data (see backend/Endpoints/
+// DocumentsAdminEndpoints.cs's ApplyVerifiedDataFromDocument). Shared by
+// Account and AdminUserDetail, both of which mirror backend/Models/User.cs's
+// Verified* fields exactly.
+export interface VerifiedProfile {
+  verifiedFullName: string | null;
+  verifiedDateOfBirth: string | null;
+  verifiedNationality: string | null;
+  verifiedPassportNumber: string | null;
+  verifiedPassportExpiryDate: string | null;
+  verifiedPassportStatus: ProfilePassportStatus | null;
+  verifiedHighestEducation: OpportunityEducationLevel | null;
+  verifiedFieldOfStudy: string | null;
+  verifiedGermanLevel: OpportunityLanguageLevel | null;
+  verifiedEnglishLevel: OpportunityLanguageLevel | null;
+  verifiedDataUpdatedAt: string | null;
+}
+
 export interface SaveResultRequest {
   email: string;
   verdictHeading: string;

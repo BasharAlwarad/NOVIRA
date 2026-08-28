@@ -48,8 +48,9 @@ public enum OpportunitySource
 // Changing a member's underlying value here silently reinterprets every
 // already-persisted row under the new numbering — there is no migration
 // that fixes this automatically. If you renumber this enum, clear and
-// reseed Opportunities (OpportunitySeeder only seeds an empty table) and
-// re-capture or fix any User rows with these fields set. This bit us once
+// re-sync/re-curate Opportunities (OpportunitySeeder was retired 2026-08-12
+// once real data existed — see Program.cs) and re-capture or fix any User
+// rows with these fields set. This bit us once
 // already (2026-08-06) when Intermediate/Advanced/Fluent were added.
 public enum LanguageLevel
 {

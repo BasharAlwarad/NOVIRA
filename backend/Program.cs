@@ -41,6 +41,10 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddScoped<AdminAuthFilter>();
+builder.Services.AddScoped<SessionAuthFilter>();
+builder.Services.AddScoped<AzureBlobStorageService>();
+builder.Services.AddScoped<DocumentVerificationService>();
+builder.Services.AddScoped<ResendEmailService>();
 
 // Coarse per-IP ceiling on /leads. Note this only ever sees the Next.js
 // server's IP for browser traffic (the frontend proxies the request
@@ -76,6 +80,45 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+
+    // Requesting a link sends a real email — same coarse per-IP ceiling
+    // shape as "leads" (the frontend proxy's own tighter budget is the real
+    // per-visitor throttle; this is defense-in-depth underneath it).
+    options.AddPolicy("auth-request-link", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    // Token brute-forcing is already computationally infeasible (256 bits of
+    // entropy, see TokenGenerator) — this is the OWASP-recommended rate
+    // limit as a defense-in-depth backstop, not the primary defense.
+    options.AddPolicy("auth-verify", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    // Each upload triggers a real Claude API call (cost) plus a blob write —
+    // tighter than the other policies above on purpose. Session-authenticated,
+    // so this is per-signed-in-user abuse, not anonymous traffic.
+    options.AddPolicy("documents-upload", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
 });
 
 var app = builder.Build();
@@ -83,11 +126,13 @@ var app = builder.Build();
 app.UseCors("frontend");
 app.UseRateLimiter();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await OpportunitySeeder.SeedIfEmptyAsync(db);
-}
+// OpportunitySeeder retired 2026-08-12 — it was only ever meant to bootstrap
+// the admin approve/deny flow before real data existed (see the seeder's own
+// comment). Real data exists now (Bundesagentur sync); leaving this call in
+// meant that any time the Opportunities table was ever emptied (e.g. cleared
+// by hand in Neon), the next app startup would silently reinsert 10 fake
+// rows with no way to distinguish "empty on purpose" from "fresh install" —
+// which is exactly what happened here. Do not re-add without addressing that.
 
 app.MapGet("/", () => Results.Ok(new
 {
@@ -97,6 +142,11 @@ app.MapGet("/", () => Results.Ok(new
 app.MapOpportunitiesAdminEndpoints();
 app.MapMatchingEndpoints();
 app.MapOpportunityCountsEndpoints();
+app.MapAuthEndpoints();
+app.MapDocumentsEndpoints();
+app.MapDocumentsAdminEndpoints();
+app.MapAccountEndpoints();
+app.MapMessagesEndpoints();
 
 app.MapPost("/leads", async (
     SaveResultRequest request,
@@ -438,7 +488,10 @@ record EligibilityCheckEntry(string Label, EligibilityCheckStatus Status, string
 // All nullable — the profile may be partial, and this is self-reported data
 // with no verification (see the comment on Models/User.cs for the planned
 // verification levels this deliberately does not attempt yet).
-record ProfileSnapshot(
+// Public (not the file's default internal) — AuthEndpoints.cs's
+// RequestLinkRequest is a public record with a ProfileSnapshot? field, and a
+// public record can't expose a less-accessible type in its members (CS0051).
+public record ProfileSnapshot(
     string? Country,
     string? Age,
     EducationLevel? HighestEducation,

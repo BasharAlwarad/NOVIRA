@@ -1,4 +1,5 @@
 import type { EvaluablePath, PathFit } from '@/lib/assessment-verdict';
+import { getOriginCountryDocumentRequirements } from '@/lib/origin-country-requirements';
 import { DesiredPath } from '@/types/assessment';
 
 export const PATH_NAMES: Record<EvaluablePath, string> = {
@@ -29,11 +30,16 @@ export const FIT_WIDTH: Record<PathFit, number> = {
  * deliberately NOT personalized guidance. Keeping this generic (not "here is
  * your checklist") is the wording-discipline line from Plan.md §3: informing
  * is fine, individualized legal/immigration advice is not.
+ *
+ * German-side demand only — the same requirement regardless of which country
+ * the user comes from. Origin-country-specific procedure (certificate
+ * legalization, etc.) deliberately lives in origin-country-requirements.ts
+ * instead and gets merged in by getDocumentChecklistItems() below — see
+ * Matching-Algorithm-Study.md §8 for why the two must stay separate.
  */
 export const DOCUMENT_CHECKLISTS: Record<EvaluablePath, ReadonlyArray<string>> = {
   [DesiredPath.University]: [
     'Secondary school certificate or university transcripts, officially translated',
-    'Certificate pre-authentication from the Egyptian Ministry of Foreign Affairs',
     'uni-assist application and document evaluation',
     'Certified German or English language exam result',
     'Proof of funds for a blocked account (currently around €11,904/year)',
@@ -42,13 +48,11 @@ export const DOCUMENT_CHECKLISTS: Record<EvaluablePath, ReadonlyArray<string>> =
   [DesiredPath.Ausbildung]: [
     'Secondary school certificate, officially translated',
     'A signed Ausbildung training contract from a German employer',
-    'Certificate pre-authentication from the Egyptian Ministry of Foreign Affairs',
     'Certified German language exam result, or proof of your current level',
     'Valid passport',
   ],
   [DesiredPath.Employment]: [
     'Degree or vocational qualification certificate, officially translated',
-    'Certificate pre-authentication from the Egyptian Ministry of Foreign Affairs',
     'Recognition of your qualification (Anerkennung), if applicable',
     'CV and employment contract or job offer',
     'Valid passport',
@@ -58,13 +62,15 @@ export const DOCUMENT_CHECKLISTS: Record<EvaluablePath, ReadonlyArray<string>> =
 export const GENERAL_DOCUMENT_CHECKLIST: ReadonlyArray<string> = [
   'Valid passport',
   'Educational certificates, officially translated into German or English',
-  'Certificate pre-authentication from the Egyptian Ministry of Foreign Affairs',
 ];
 
 export function getDocumentChecklistItems(
-  highlightedPath: EvaluablePath | null
+  highlightedPath: EvaluablePath | null,
+  country: string | null
 ): ReadonlyArray<string> {
-  return highlightedPath
+  const pathItems = highlightedPath
     ? DOCUMENT_CHECKLISTS[highlightedPath]
     : GENERAL_DOCUMENT_CHECKLIST;
+
+  return [...pathItems, ...getOriginCountryDocumentRequirements(country)];
 }

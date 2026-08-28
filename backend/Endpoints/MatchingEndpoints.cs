@@ -36,5 +36,25 @@ public static class MatchingEndpoints
 
             return Results.Ok(matches);
         });
+
+        // The real signup payoff (Plan.md §4's "see real matches, still
+        // free" boundary) — full match details (not just counts, unlike
+        // /opportunity-counts) for the logged-in user's own profile only.
+        // Session-authenticated, not admin-key-protected: this is for any
+        // signed-up user, not just the founder.
+        var authenticated = app.MapGroup("/").AddEndpointFilter<SessionAuthFilter>();
+
+        authenticated.MapGet("/matches", async (HttpContext httpContext, AppDbContext db) =>
+        {
+            var user = (User)httpContext.Items["CurrentUser"]!;
+
+            var approvedOpportunities = await db.Opportunities
+                .Where(o => o.Status == OpportunityStatus.Approved)
+                .ToListAsync();
+
+            var matches = MatchingService.Match(user, approvedOpportunities);
+
+            return Results.Ok(matches);
+        });
     }
 }

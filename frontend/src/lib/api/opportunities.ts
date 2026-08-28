@@ -1,4 +1,8 @@
-import type { Opportunity, OpportunityStatus } from '@/lib/contracts/opportunities';
+import type {
+  CreateOpportunityRequest,
+  Opportunity,
+  OpportunityStatus,
+} from '@/lib/contracts/opportunities';
 
 export class AdminUnauthorizedError extends Error {
   constructor() {
@@ -35,6 +39,35 @@ export async function listOpportunities(adminKey: string): Promise<Opportunity[]
   }
 
   return (await response.json()) as Opportunity[];
+}
+
+export async function syncAusbildung(adminKey: string): Promise<{ added: number }> {
+  const response = await adminFetch('/api/admin/opportunities/sync-ausbildung', adminKey, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to generate Ausbildung opportunities.');
+  }
+
+  return (await response.json()) as { added: number };
+}
+
+export async function createOpportunity(
+  adminKey: string,
+  request: CreateOpportunityRequest
+): Promise<Opportunity> {
+  const response = await adminFetch('/api/admin/opportunities', adminKey, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to create opportunity.');
+  }
+
+  return (await response.json()) as Opportunity;
 }
 
 export async function updateOpportunityStatus(

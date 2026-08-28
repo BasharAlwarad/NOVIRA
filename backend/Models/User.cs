@@ -106,4 +106,37 @@ public class User
     public StartTimeline? StartTimeline { get; set; }
     public RegionFlexibility? RegionFlexibility { get; set; }
     public DateTime? ProfileUpdatedAt { get; set; }
+
+    // Level 3 of the four-level user-data model — populated only when an
+    // admin clicks Approve on a document (DocumentsAdminEndpoints), never
+    // from AI extraction alone. This is a deliberate extension of, not an
+    // exception to, the "never silently overwrite identity fields from AI
+    // judgment alone" rule on AiNameMatchesProfile (see UserDocument.cs) —
+    // an explicit human Approve action isn't silent. Matching prefers a
+    // Verified* value over its Level-1 self-reported counterpart when
+    // present (see MatchingService). Not retroactively backfilled for
+    // documents approved before this existed.
+    public string? VerifiedFullName { get; set; }
+    public string? VerifiedDateOfBirth { get; set; } // ISO 8601 string, same convention as document expiry dates
+    public string? VerifiedNationality { get; set; }
+    public string? VerifiedPassportNumber { get; set; }
+    public string? VerifiedPassportExpiryDate { get; set; }
+    public PassportStatus? VerifiedPassportStatus { get; set; } // derived from VerifiedPassportExpiryDate vs today
+    public EducationLevel? VerifiedHighestEducation { get; set; }
+    public string? VerifiedFieldOfStudy { get; set; }
+    public LanguageLevel? VerifiedGermanLevel { get; set; }
+    public LanguageLevel? VerifiedEnglishLevel { get; set; }
+    public DateTime? VerifiedDataUpdatedAt { get; set; }
+
+    // Set when an admin flags one of this user's documents "FlaggedRed"
+    // (UserDocument.ReviewStatus) — a suspected-fraud signal that lives on
+    // the user, not just the document, since one fraudulent document is a
+    // signal about the person. Distinct from a document being merely
+    // Denied (legitimate but insufficient, invites a reupload). Blocks
+    // further self-service document uploads (see DocumentsEndpoints) until
+    // an admin manually clears it — there is deliberately no self-service
+    // unflag path yet.
+    public bool FraudFlagged { get; set; }
+    public DateTime? FraudFlaggedAt { get; set; }
+    public string? FraudFlagNote { get; set; }
 }

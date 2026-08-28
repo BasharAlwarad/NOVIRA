@@ -81,9 +81,12 @@ public static class MatchingService
         }
 
         // Education minimum — not closeable on any realistic timeline,
-        // unlike the soft factors below.
+        // unlike the soft factors below. Prefers the Level-3 verified value
+        // (set only once an admin approves an education certificate) over
+        // the Level-1 self-report when both exist — see User.cs.
+        var highestEducation = profile.VerifiedHighestEducation ?? profile.HighestEducation;
         if (opportunity.MinEducationLevel is { } minEducation
-            && (profile.HighestEducation is not { } userEducation || userEducation < minEducation))
+            && (highestEducation is not { } userEducation || userEducation < minEducation))
         {
             return false;
         }
@@ -96,33 +99,43 @@ public static class MatchingService
         var score = 0;
         var factors = new List<MatchFactor>();
 
+        // Same verified-over-self-reported preference as the education
+        // filter above — set only once an admin approves a language
+        // certificate.
+        var germanLevel = profile.VerifiedGermanLevel ?? profile.GermanLevel;
+        var isGermanVerified = profile.VerifiedGermanLevel is not null;
+        var englishLevel = profile.VerifiedEnglishLevel ?? profile.EnglishLevel;
+        var isEnglishVerified = profile.VerifiedEnglishLevel is not null;
+
         if (opportunity.RequiredGermanLevel is { } requiredGerman)
         {
-            if (profile.GermanLevel is { } userGerman && userGerman >= requiredGerman)
+            var verifiedSuffix = isGermanVerified ? " — verified" : "";
+            if (germanLevel is { } userGerman && userGerman >= requiredGerman)
             {
                 score += 2;
-                factors.Add(new MatchFactor($"Meets the required German level ({requiredGerman})", true));
+                factors.Add(new MatchFactor($"Meets the required German level ({requiredGerman}){verifiedSuffix}", true));
             }
             else
             {
                 score -= 1;
                 factors.Add(new MatchFactor(
-                    $"German level is below what's typically required ({requiredGerman}) — closeable with study", false));
+                    $"German level is below what's typically required ({requiredGerman}) — closeable with study{verifiedSuffix}", false));
             }
         }
 
         if (opportunity.RequiredEnglishLevel is { } requiredEnglish)
         {
-            if (profile.EnglishLevel is { } userEnglish && userEnglish >= requiredEnglish)
+            var verifiedSuffix = isEnglishVerified ? " — verified" : "";
+            if (englishLevel is { } userEnglish && userEnglish >= requiredEnglish)
             {
                 score += 2;
-                factors.Add(new MatchFactor($"Meets the required English level ({requiredEnglish})", true));
+                factors.Add(new MatchFactor($"Meets the required English level ({requiredEnglish}){verifiedSuffix}", true));
             }
             else
             {
                 score -= 1;
                 factors.Add(new MatchFactor(
-                    $"English level is below what's typically required ({requiredEnglish}) — closeable with study", false));
+                    $"English level is below what's typically required ({requiredEnglish}) — closeable with study{verifiedSuffix}", false));
             }
         }
 
