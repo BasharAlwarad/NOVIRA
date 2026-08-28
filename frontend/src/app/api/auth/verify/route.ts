@@ -52,5 +52,5 @@ export async function POST(request: Request) {
   // Never echo the raw session token back into the response body — from
   // here on it only lives in the HttpOnly cookie and the backend's Sessions
   // table, never somewhere client-side JS could read it.
-  return Response.json({ email: data.email });
+  return Response.json({ email: data.email, hasProfile: Boolean(data.hasProfile) });
 }

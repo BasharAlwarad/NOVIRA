@@ -15,20 +15,27 @@ type PageState =
   | 'error'
   | 'rate-limited';
 
-// The standalone sign-in entry point — closes a real gap found 2026-08-28:
-// the only other place that could request a magic link (SignupPrompt.tsx)
-// only renders on /assessment/result, which itself hard-requires a saved
-// assessment in localStorage. A returning user on a new device, or one
-// who's cleared their browser data, or simply doesn't remember that URL,
-// had no way back in short of redoing the entire 14-question assessment.
-// This page works regardless of local state — no `profile` is sent (there
-// may be no local assessment data at all), which is safe: `/auth/verify`
-// only overwrites the stored profile when one is actually provided, so an
-// existing account's data is left untouched.
+// The standalone sign-in / sign-up entry point. Originally closed a real
+// gap (found 2026-08-28): the only other place that could request a magic
+// link (SignupPrompt.tsx) only renders on /assessment/result, which itself
+// hard-requires a saved assessment in localStorage — a returning user on a
+// new device, or one who'd cleared their browser data, had no way back in
+// short of redoing the entire 14-question assessment.
+//
+// Deliberately also serves brand-new users (2026-08-28 decision, see
+// CLAUDE.md's "Sign-up UX" entry) — there's no meaningful backend
+// distinction between "signup" and "signin" when there's no password, so
+// one page and one form correctly handles both: someone who already knows
+// about NOVIRA can create an account and start uploading documents
+// immediately, without the assessment funnel. No `profile` is sent (there
+// may be no local assessment data at all), which is safe either way:
+// /auth/verify only overwrites the stored profile when one is actually
+// provided, so an existing account's data is left untouched.
 export default function SignInPage() {
   const [state, setState] = useState<PageState>('checking-session');
   const [email, setEmail] = useState('');
   const [emailSent, setEmailSent] = useState(true);
+  const [hasProfile, setHasProfile] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +43,7 @@ export default function SignInPage() {
     getCurrentUser()
       .then((user) => {
         if (!cancelled) {
+          setHasProfile(user?.hasProfile ?? false);
           setState(user ? 'already-signed-in' : 'idle');
         }
       })
@@ -68,10 +76,10 @@ export default function SignInPage() {
       <SiteNav />
       <section className="mx-auto w-full max-w-md px-4 py-20 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
-          Sign in
+          Sign in or sign up
         </p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
-          Welcome back
+          One email, no password
         </h1>
 
         {state === 'checking-session' && (
@@ -84,10 +92,10 @@ export default function SignInPage() {
               You&apos;re already signed in.
             </p>
             <Link
-              href="/matches"
+              href={hasProfile ? '/matches' : '/account'}
               className="mt-3 inline-flex h-11 items-center justify-center rounded-full bg-emerald-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
             >
-              View my matches
+              {hasProfile ? 'View my matches' : 'Go to my account'}
             </Link>
           </div>
         )}
@@ -99,7 +107,7 @@ export default function SignInPage() {
             </p>
             <p className="mt-1 text-sm leading-6 text-emerald-800">
               {emailSent
-                ? `We sent a sign-in link to ${email}. Click it to get back in — it expires in 15 minutes.`
+                ? `We sent a sign-in link to ${email}. Click it to continue — it expires in 15 minutes.`
                 : 'Something went wrong sending that email — please try again in a moment.'}
             </p>
           </div>
@@ -108,8 +116,8 @@ export default function SignInPage() {
         {(state === 'idle' || state === 'submitting' || state === 'error' || state === 'rate-limited') && (
           <>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              No password to remember — enter the email you used before and
-              we&apos;ll send you a link to sign back in.
+              Enter your email and we&apos;ll send you a secure sign-in link —
+              new here or coming back, it works the same way either time.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
@@ -146,10 +154,11 @@ export default function SignInPage() {
             )}
 
             <p className="mt-6 text-sm text-slate-500">
-              Don&apos;t have an account yet?{' '}
+              Prefer some guidance first?{' '}
               <Link href="/assessment" className="font-semibold text-emerald-700 underline underline-offset-2">
-                Take the assessment
-              </Link>
+                Take our free assessment
+              </Link>{' '}
+              to see how your profile fits.
             </p>
           </>
         )}

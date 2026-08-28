@@ -46,8 +46,13 @@ function AuthVerifyContent() {
     }
 
     verifyMagicLink({ token })
-      .then(() => {
-        router.replace('/matches');
+      .then((response) => {
+        // A profile-less account (signed up via the standalone /signin
+        // page, never completed the assessment) has nothing for /matches
+        // to show — land them on /account instead, where they can start
+        // uploading documents immediately. An account with a real profile
+        // still goes straight to /matches, unchanged.
+        router.replace(response.hasProfile ? '/matches' : '/account');
       })
       .catch(() => {
         setState('error');

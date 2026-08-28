@@ -149,7 +149,12 @@
       "Bash(node verify/signin-gap-debug.mjs)",
       "Bash(node verify/signin-gap-full.mjs \"OUeILJG64KDK1OI0jtWcXMT1VvgJ1L6Nt2ijtU0MqWw\")",
       "Bash(curl -s \"http://localhost:5080/admin/opportunities\" -H \"X-Admin-Key: 123\")",
-      "Bash(curl -s \"http://localhost:5080/admin/users?search=verify-signin-gap\" -H \"X-Admin-Key: 123\")"
+      "Bash(curl -s \"http://localhost:5080/admin/users?search=verify-signin-gap\" -H \"X-Admin-Key: 123\")",
+      "PowerShell(Stop-Process -Id 34552 -Force)",
+      "Bash(curl -s -X POST http://localhost:5080/auth/request-link -H 'Content-Type: application/json' -d '{\"email\":\"__TRACKED_VAR__\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X POST http://localhost:5080/auth/request-link -H 'Content-Type: application/json' -d '{\"email\":\"verify-existing-signin@example.com\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(node verify/signin-copy.mjs)",
+      "Bash(node verify/signin-copy-debug.mjs)"
     ],
     "additionalDirectories": [
       "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude",

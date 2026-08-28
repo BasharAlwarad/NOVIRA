@@ -44,6 +44,30 @@ function statusLabel(status: UserDocumentSummary['reviewStatus']): string {
   }
 }
 
+// Shown only for an account with no profile yet — i.e. someone who signed
+// up directly via /signin without ever completing the assessment (see
+// CLAUDE.md's "Sign-up UX" entry, 2026-08-28). Without this, ProfileSection
+// below would just be ten "—" placeholders with no explanation, which reads
+// as broken rather than as a genuinely empty, expected state.
+function NoProfileBanner() {
+  return (
+    <section className="rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5">
+      <h2 className="text-sm font-semibold text-emerald-900">Welcome to NOVIRA</h2>
+      <p className="mt-1 text-sm leading-6 text-emerald-800">
+        You don&apos;t have a profile yet — that&apos;s fine, you can start uploading documents
+        right away below. For matched opportunities tailored to your situation, take the free
+        assessment whenever you&apos;re ready.
+      </p>
+      <Link
+        href="/assessment"
+        className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+      >
+        Take the assessment
+      </Link>
+    </section>
+  );
+}
+
 function ProfileSection({ account }: { account: Account }) {
   const fields: [string, string | null][] = [
     ['Country', account.country],
@@ -450,6 +474,7 @@ export default function AccountPage() {
 
           {state.status === 'loaded' && (
             <>
+              {!state.account.profileUpdatedAt && <NoProfileBanner />}
               <ProfileSection account={state.account} />
               <VerifiedSection account={state.account} />
               <DocumentsSection documents={documents} onUploaded={loadDocuments} />

@@ -33,8 +33,14 @@ namespace Novira.Backend.Endpoints;
 public record RequestLinkRequest(string Email, ProfileSnapshot? Profile);
 public record RequestLinkResponse(bool EmailSent);
 public record VerifyRequest(string Token);
-public record VerifyResponse(string SessionToken, string Email);
-public record MeResponse(string Email);
+// HasProfile (added 2026-08-28, for the standalone /signin entry point) is
+// `user.ProfileUpdatedAt is not null` — the same marker /leads and
+// /auth/verify's profile-application both set exactly when a real Tier 1
+// profile snapshot has ever been written. Lets the frontend land a
+// profile-less fresh signup somewhere useful (/account) instead of /matches,
+// which would otherwise just show an unexplained empty result.
+public record VerifyResponse(string SessionToken, string Email, bool HasProfile);
+public record MeResponse(string Email, bool HasProfile);
 
 /// <summary>
 /// The account-signup boundary from Plan.md §4 — free, email-only,
@@ -227,7 +233,7 @@ public static class AuthEndpoints
 
             await db.SaveChangesAsync();
 
-            return Results.Ok(new VerifyResponse(rawSessionToken, user.Email));
+            return Results.Ok(new VerifyResponse(rawSessionToken, user.Email, user.ProfileUpdatedAt is not null));
         })
         .RequireRateLimiting("auth-verify");
 
@@ -236,7 +242,7 @@ public static class AuthEndpoints
         authenticated.MapGet("/me", (HttpContext httpContext) =>
         {
             var user = (User)httpContext.Items["CurrentUser"]!;
-            return Results.Ok(new MeResponse(user.Email));
+            return Results.Ok(new MeResponse(user.Email, user.ProfileUpdatedAt is not null));
         });
 
         authenticated.MapPost("/logout", async (HttpContext httpContext, AppDbContext db) =>

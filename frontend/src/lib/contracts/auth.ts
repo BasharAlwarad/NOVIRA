@@ -24,10 +24,17 @@ export interface VerifyRequest {
   token: string;
 }
 
+// hasProfile (added 2026-08-28) — whether a real Tier 1 profile snapshot
+// has ever been written to this account. Lets the caller land a
+// profile-less fresh signup (via the standalone /signin page) somewhere
+// useful (/account) instead of /matches, which would otherwise just show
+// an unexplained empty result.
 export interface VerifyResponse {
   email: string;
+  hasProfile: boolean;
 }
 
 export interface MeResponse {
   email: string;
+  hasProfile: boolean;
 }
