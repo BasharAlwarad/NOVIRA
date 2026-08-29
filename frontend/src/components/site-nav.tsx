@@ -127,6 +127,14 @@ export function SiteNav() {
               Sign in
             </Link>
           )}
+          {signedIn && (
+            <Link
+              href="/matches"
+              className="text-sm font-medium text-slate-300 transition hover:text-white"
+            >
+              My matches
+            </Link>
+          )}
           <Link
             href={signedIn ? '/account' : '/assessment'}
             className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300"

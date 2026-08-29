@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
@@ -203,12 +204,16 @@ public static class DocumentsAdminEndpoints
             }
 
             // The Approve-gated trust boundary — see the comment on
-            // User.VerifiedFullName. This is the only place extracted
-            // document data is ever written onto the account.
-            if (request.Status == DocumentReviewStatus.Approved)
-            {
-                ApplyVerifiedDataFromDocument(user, document);
-            }
+            // User.VerifiedFullName. Re-derived on every review decision
+            // (not just Approve) so a document reclassified *away* from
+            // Approved (e.g. Approved, then discovered fraudulent and
+            // FlaggedRed) stops contributing too — see RecomputeVerifiedData
+            // for why a full re-derivation, not an incremental unwind, is
+            // how this is closed (found in code review 2026-08-28).
+            var otherDocuments = await db.UserDocuments
+                .Where(d => d.UserId == userId && d.Id != documentId)
+                .ToListAsync();
+            RecomputeVerifiedData(user, otherDocuments.Append(document).ToList());
 
             await db.SaveChangesAsync();
 
@@ -232,13 +237,12 @@ public static class DocumentsAdminEndpoints
 
         // Documents approved before ApplyVerifiedDataFromDocument existed
         // (2026-08-16) were never backfilled — see the comment on
-        // User.VerifiedFullName. This is the catch-up path: re-runs the same
-        // promotion logic over every already-Approved document for this
-        // user, oldest upload first (so, for fields multiple documents
-        // could set, the most-recently-uploaded document's value wins —
-        // the same "last write wins" behavior live approvals already have).
-        // Safe to call repeatedly; it only ever re-derives from documents
-        // that were already Approved by a human.
+        // User.VerifiedFullName. This is the catch-up path: re-derives
+        // Verified* data from every currently-Approved document for this
+        // user (see RecomputeVerifiedData). Safe to call repeatedly, and
+        // also doubles as a manual re-sync if a document's review status
+        // was ever changed outside the normal PATCH flow (which now runs
+        // the same recompute automatically on every review decision).
         group.MapPost("/{id:guid}/recompute-verified-data", async (
             Guid id,
             AppDbContext db,
@@ -250,15 +254,10 @@ public static class DocumentsAdminEndpoints
                 return Results.NotFound();
             }
 
-            var approvedDocuments = await db.UserDocuments
-                .Where(d => d.UserId == id && d.ReviewStatus == DocumentReviewStatus.Approved)
-                .OrderBy(d => d.UploadedAt)
+            var allDocuments = await db.UserDocuments
+                .Where(d => d.UserId == id)
                 .ToListAsync();
-
-            foreach (var document in approvedDocuments)
-            {
-                ApplyVerifiedDataFromDocument(user, document);
-            }
+            RecomputeVerifiedData(user, allDocuments);
 
             await db.SaveChangesAsync();
 
@@ -390,11 +389,51 @@ public static class DocumentsAdminEndpoints
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
+    // Full re-derivation, not an incremental patch — this is what actually
+    // closes the "reclassified after Approve" gap (found in code review
+    // 2026-08-28): a document that is no longer Approved (Denied,
+    // FlaggedRed, or reverted to PendingReview) must stop contributing to
+    // the account's verified data, not just fail to contribute *more* of
+    // it. Wiping every Verified* field and re-applying ApplyVerifiedData-
+    // FromDocument over the current Approved set (oldest upload first, so
+    // "last write wins" for a field multiple documents could set — the
+    // same behavior this already had) is simpler and more robust than
+    // tracking which document contributed which field for a targeted
+    // unwind. Callers pass every document for the user (any status); the
+    // Approved filter happens here, once.
+    private static void RecomputeVerifiedData(User user, List<UserDocument> allDocuments)
+    {
+        user.VerifiedFullName = null;
+        user.VerifiedDateOfBirth = null;
+        user.VerifiedNationality = null;
+        user.VerifiedPassportNumber = null;
+        user.VerifiedPassportExpiryDate = null;
+        user.VerifiedPassportStatus = null;
+        user.VerifiedHighestEducation = null;
+        user.VerifiedFieldOfStudy = null;
+        user.VerifiedGermanLevel = null;
+        user.VerifiedEnglishLevel = null;
+        user.VerifiedDataUpdatedAt = null;
+
+        var approvedDocuments = allDocuments
+            .Where(d => d.ReviewStatus == DocumentReviewStatus.Approved)
+            .OrderBy(d => d.UploadedAt)
+            .ToList();
+
+        foreach (var document in approvedDocuments)
+        {
+            ApplyVerifiedDataFromDocument(user, document);
+        }
+    }
+
     // The trust-boundary hook — the only place UserDocument's AI-extracted
-    // data is ever promoted onto the account, called only from the Approved
-    // branch above. Never blanks an existing Verified* field with an empty
+    // data is ever promoted onto the account, called only from
+    // RecomputeVerifiedData above (which only ever passes Approved
+    // documents). Never blanks an existing Verified* field with an empty
     // extraction; only writes what this document actually and legibly
-    // contained. See the comment on User.VerifiedFullName for why this is
+    // contained — the wipe that makes reclassification-unwind work happens
+    // once, in RecomputeVerifiedData, before any document is (re-)applied.
+    // See the comment on User.VerifiedFullName for why promotion itself is
     // gated on an explicit human Approve rather than AI completion alone.
     private static void ApplyVerifiedDataFromDocument(User user, UserDocument document)
     {
@@ -443,8 +482,14 @@ public static class DocumentsAdminEndpoints
                     wroteAnything = true;
                 }
 
+                // TryParseExact against the exact ISO format the extraction
+                // prompt requests, with InvariantCulture — plain TryParse()
+                // uses the server's ambient culture, which could silently
+                // fail to parse a perfectly valid AI-extracted date on a
+                // non-US-locale server and quietly drop VerifiedPassportStatus
+                // with no error anywhere (found in code review 2026-08-28).
                 if (!string.IsNullOrWhiteSpace(extracted.ExpiryDate)
-                    && DateOnly.TryParse(extracted.ExpiryDate, out var expiry))
+                    && DateOnly.TryParseExact(extracted.ExpiryDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var expiry))
                 {
                     user.VerifiedPassportExpiryDate = extracted.ExpiryDate;
                     user.VerifiedPassportStatus = expiry < DateOnly.FromDateTime(DateTime.UtcNow)

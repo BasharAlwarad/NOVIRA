@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getCurrentUser, RateLimitedError, requestMagicLink } from '@/lib/api/auth';
+import { loadAssessment } from '@/lib/assessment-storage';
+import { buildProfileSnapshot } from '@/lib/profile-snapshot';
+import type { ProfileSnapshot } from '@/lib/contracts/leads';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -27,18 +30,40 @@ type PageState =
 // distinction between "signup" and "signin" when there's no password, so
 // one page and one form correctly handles both: someone who already knows
 // about NOVIRA can create an account and start uploading documents
-// immediately, without the assessment funnel. No `profile` is sent (there
-// may be no local assessment data at all), which is safe either way:
-// /auth/verify only overwrites the stored profile when one is actually
-// provided, so an existing account's data is left untouched.
+// immediately, without the assessment funnel.
+//
+// `profile` is read from localStorage on mount (2026-08-28, real bug found
+// live: a user who'd completed the assessment — and could already see a
+// real opportunity count on /assessment/result — then signed in through
+// *this* page instead of that page's embedded SignupPrompt ended up with a
+// permanently empty account: this page originally never sent a profile at
+// all, on the reasoning that "there may be no local assessment data at all
+// on this device." True, but when there IS local data, not sending it
+// silently strands it — the account gets created with nothing, /matches
+// correctly (but confusingly) shows 0, and there's no error anywhere to
+// explain why. Now this page checks localStorage exactly like
+// SignupPrompt.tsx does and includes the profile if one exists; if there
+// truly is none, it still sends nothing, which was always safe (see
+// AuthEndpoints.cs: /auth/verify only overwrites the stored profile when
+// one is actually provided, so an existing account's real data is never
+// touched by a profile-less sign-in).
 export default function SignInPage() {
   const [state, setState] = useState<PageState>('checking-session');
   const [email, setEmail] = useState('');
   const [emailSent, setEmailSent] = useState(true);
   const [hasProfile, setHasProfile] = useState(false);
+  const [localProfile, setLocalProfile] = useState<ProfileSnapshot | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    // One-time sync from localStorage (an external, client-only source) on
+    // mount — same pattern as assessment/result/page.tsx's own load.
+    const stored = loadAssessment();
+    if (stored?.answers) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLocalProfile(buildProfileSnapshot(stored.answers));
+    }
 
     getCurrentUser()
       .then((user) => {
@@ -63,7 +88,9 @@ export default function SignInPage() {
     setState('submitting');
 
     try {
-      const response = await requestMagicLink({ email });
+      const response = await requestMagicLink(
+        localProfile ? { email, profile: localProfile } : { email }
+      );
       setEmailSent(response.emailSent);
       setState('sent');
     } catch (error) {

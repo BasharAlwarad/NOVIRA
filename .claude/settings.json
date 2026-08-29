@@ -154,11 +154,42 @@
       "Bash(curl -s -X POST http://localhost:5080/auth/request-link -H 'Content-Type: application/json' -d '{\"email\":\"__TRACKED_VAR__\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
       "Bash(curl -s -X POST http://localhost:5080/auth/request-link -H 'Content-Type: application/json' -d '{\"email\":\"verify-existing-signin@example.com\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
       "Bash(node verify/signin-copy.mjs)",
-      "Bash(node verify/signin-copy-debug.mjs)"
+      "Bash(node verify/signin-copy-debug.mjs)",
+      "PowerShell(Stop-Process -Id 30116 -Force -ErrorAction SilentlyContinue)",
+      "Bash(curl -s -X POST http://localhost:5080/documents -H 'X-Session-Token: __TRACKED_VAR__' -F 'name=Test doc for fraud flag' -F 'file=@C:\\\\Users\\\\beelw\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\tiny.png;type=image/png' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X PATCH http://localhost:5080/admin/users/__CMDSUB_OUTPUT__/documents/__TRACKED_VAR__ -H 'X-Admin-Key: 123' -H 'Content-Type: application/json' -d '{\"status\":\"FlaggedRed\",\"note\":\"Fraud flag test\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X POST http://localhost:5080/documents -H 'X-Session-Token: __CMDSUB_OUTPUT__' -F 'name=Second attempt' -F 'file=@C:\\\\Users\\\\beelw\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\tiny.png;type=image/png' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X DELETE http://localhost:5080/admin/users/__CMDSUB_OUTPUT__ -H 'X-Admin-Key: 123' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s http://localhost:5080/admin/users/__CMDSUB_OUTPUT__ -H 'X-Admin-Key: 123' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(rm -f /c/Users/beelw/AppData/Local/Temp/claude/fraud-test-session.txt /c/Users/beelw/AppData/Local/Temp/claude/fraud-test-userid.txt /c/Users/beelw/AppData/Local/Temp/claude/tiny.png *)",
+      "Bash(rm -rf /c/Users/beelw/AppData/Local/Temp/claude/dateonly-test *)",
+      "Bash(curl -s -X POST http://localhost:5080/auth/request-link -H \"Content-Type: application/json\" -d '{\"email\":\"verify-mobile-nav@example.com\"}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -o /dev/null -w \"frontend HTTP %{http_code}\\\\n\" http://localhost:3000/ --max-time 5)",
+      "Bash(node verify/mobile-nav.mjs)",
+      "Bash(curl -s \"http://localhost:5080/admin/users?search=verify-mobile-nav\" -H \"X-Admin-Key: 123\")",
+      "Bash(curl -s -X DELETE \"http://localhost:5080/admin/users/42a056b7-253f-445a-ae7d-28b4f20b2f8b\" -H \"X-Admin-Key: 123\" -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "PowerShell(Stop-Process -Id 24988 -Force -ErrorAction SilentlyContinue)",
+      "Bash(curl -s http://localhost:5080/ -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(python3 -c \"import psycopg2\")",
+      "Bash(mkdir -p /c/Users/beelw/AppData/Local/Temp/claude/verify-unwind)",
+      "Bash(cat)",
+      "Bash(curl -s \"http://localhost:5080/admin/users?search=verify-unwind\" -H \"X-Admin-Key: 123\")",
+      "Bash(curl -s -X PATCH http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c/documents/946a8c2b-1426-48ef-90ed-b12ec1060a26 -H 'Content-Type: application/json' -H 'X-Admin-Key: 123' -d '{\"status\":\"Approved\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
+      "Bash(curl -s http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c -H 'X-Admin-Key: 123')",
+      "Bash(curl -s -X PATCH http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c/documents/ab7a09fb-c87a-4fb9-869c-85e22b2b6d99 -H 'Content-Type: application/json' -H 'X-Admin-Key: 123' -d '{\"status\":\"Approved\"}' -o /dev/null -w 'PATCH HTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X PATCH http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c/documents/946a8c2b-1426-48ef-90ed-b12ec1060a26 -H 'Content-Type: application/json' -H 'X-Admin-Key: 123' -d '{\"status\":\"FlaggedRed\",\"note\":\"Discovered fraudulent\"}' -o /dev/null -w 'PATCH \\(reclassify passport to FlaggedRed\\) HTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X PATCH http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c/documents/ab7a09fb-c87a-4fb9-869c-85e22b2b6d99 -H 'Content-Type: application/json' -H 'X-Admin-Key: 123' -d '{\"status\":\"Denied\"}' -o /dev/null -w 'PATCH \\(deny education cert\\) HTTP %{http_code}\\\\n')",
+      "Bash(curl -s -X DELETE http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c -H 'X-Admin-Key: 123' -w '\\\\nDELETE HTTP %{http_code}\\\\n')",
+      "Bash(curl -s http://localhost:5080/admin/users/1e872523-e8f8-4799-bced-244a9f1f533c -H 'X-Admin-Key: 123' -w '\\\\nconfirm-gone HTTP %{http_code}\\\\n')",
+      "Bash(rm -rf /c/Users/beelw/AppData/Local/Temp/claude/verify-unwind)",
+      "Bash(curl -s \"http://localhost:5080/admin/users/ff681ac5-a1b7-4089-b013-7b985fe5295b\" -H \"X-Admin-Key: 123\")",
+      "Bash(git add *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude",
-      "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude\\c--Users-beelw-Desktop-NOVIRA\\c28eeaa1-7e43-40d1-98f2-94921a24913d\\scratchpad\\migrate-tool"
+      "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude\\c--Users-beelw-Desktop-NOVIRA\\c28eeaa1-7e43-40d1-98f2-94921a24913d\\scratchpad\\migrate-tool",
+      "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude\\dateonly-test",
+      "C:\\Users\\beelw\\AppData\\Local\\Temp\\claude\\verify-unwind"
     ]
   }
 }

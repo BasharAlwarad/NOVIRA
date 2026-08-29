@@ -61,8 +61,17 @@ public static class DocumentsEndpoints
             // deliberately no self-service unflag path.
             if (user.FraudFlagged)
             {
-                return Results.Problem(
-                    "Uploads are currently unavailable for this account. Contact support if you believe this is a mistake.",
+                // Results.Problem() returns a ProblemDetails body (a `detail`
+                // field), but every other error in this file — and the
+                // frontend's error handling in lib/api/documents.ts — uses
+                // the `{ message }` shape. That mismatch silently dropped
+                // this specific reason: the frontend only ever read
+                // `body.message`, so a fraud-flagged user just saw a generic
+                // "Failed to upload document." with no explanation (found in
+                // code review 2026-08-28). Results.Json keeps the same 403
+                // status while matching the shape every caller expects.
+                return Results.Json(
+                    new { message = "Uploads are currently unavailable for this account. Contact support if you believe this is a mistake." },
                     statusCode: StatusCodes.Status403Forbidden);
             }
 

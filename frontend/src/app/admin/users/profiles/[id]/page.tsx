@@ -203,7 +203,7 @@ function DocumentCard({
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Optional note (included in the email for Deny / Flag red)"
+            placeholder="Optional note (shown to the user in their in-app message for Deny / Flag red)"
             rows={2}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
           />
