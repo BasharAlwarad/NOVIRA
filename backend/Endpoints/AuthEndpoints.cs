@@ -203,24 +203,7 @@ public static class AuthEndpoints
             if (!string.IsNullOrWhiteSpace(magicLinkToken.PendingProfileJson))
             {
                 var profile = JsonSerializer.Deserialize<ProfileSnapshot>(magicLinkToken.PendingProfileJson);
-                if (profile is not null)
-                {
-                    user.Country = profile.Country;
-                    user.Age = profile.Age;
-                    user.HighestEducation = profile.HighestEducation;
-                    user.OccupationField = profile.OccupationField;
-                    user.WorkExperience = profile.WorkExperience;
-                    user.DesiredPath = profile.DesiredPath;
-                    user.GermanLevel = profile.GermanLevel;
-                    user.EnglishLevel = profile.EnglishLevel;
-                    user.LanguageCertificate = profile.LanguageCertificate;
-                    user.PassportStatus = profile.PassportStatus;
-                    user.GermanyConnection = profile.GermanyConnection;
-                    user.FinancialSituation = profile.FinancialSituation;
-                    user.StartTimeline = profile.StartTimeline;
-                    user.RegionFlexibility = profile.RegionFlexibility;
-                    user.ProfileUpdatedAt = DateTime.UtcNow;
-                }
+                profile?.ApplyTo(user);
             }
 
             var rawSessionToken = TokenGenerator.GenerateRawToken();

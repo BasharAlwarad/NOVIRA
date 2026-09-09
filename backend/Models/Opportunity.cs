@@ -13,10 +13,15 @@ public enum OpportunityStatus
     Denied,
 }
 
+// AiResearch appended at the end (2026-08-29) — Postgres stores this column
+// as a raw integer (see the LanguageLevel comment below), so appending a
+// new member is safe; inserting one in the middle would silently
+// reinterpret every already-persisted row's Source under new numbering.
 public enum OpportunitySource
 {
     Manual,
     Bundesagentur,
+    AiResearch,
 }
 
 // Mirrors frontend/src/types/assessment.ts LanguageLevel, corrected in two

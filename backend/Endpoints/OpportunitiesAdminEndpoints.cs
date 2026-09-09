@@ -137,5 +137,23 @@ public static class OpportunitiesAdminEndpoints
             var added = await syncService.SyncAusbildungAsync();
             return Results.Ok(new { added });
         });
+
+        // AI-assisted University sourcing (built 2026-08-29) — the
+        // counterpart to sync-ausbildung above, for a path with no API to
+        // sync from. Same discipline: manually triggered, not a background
+        // job, and everything lands Pending — see OpportunitySyncService.
+        // GenerateUniversityAsync / UniversityResearchService for the
+        // source-credibility design.
+        group.MapPost("/generate-university", async (OpportunitySyncService syncService) =>
+        {
+            var result = await syncService.GenerateUniversityAsync();
+            return Results.Ok(new
+            {
+                added = result.Added,
+                fieldsResearched = result.FieldsResearched,
+                fieldsSkipped = result.FieldsSkipped,
+                estimatedCostUsd = result.EstimatedCostUsd,
+            });
+        });
     }
 }

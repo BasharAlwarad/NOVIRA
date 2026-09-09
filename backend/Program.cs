@@ -35,6 +35,7 @@ builder.Services.AddHttpClient<BundesagenturJobsucheClient>(client =>
     client.DefaultRequestHeaders.Add("X-API-Key", "jobboerse-jobsuche");
     client.Timeout = TimeSpan.FromSeconds(20);
 });
+builder.Services.AddScoped<UniversityResearchService>();
 builder.Services.AddScoped<OpportunitySyncService>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -185,21 +186,7 @@ app.MapPost("/leads", async (
         // not merged, so the row always reflects the most recent assessment.
         if (request.Profile is { } profile)
         {
-            user.Country = profile.Country;
-            user.Age = profile.Age;
-            user.HighestEducation = profile.HighestEducation;
-            user.OccupationField = profile.OccupationField;
-            user.WorkExperience = profile.WorkExperience;
-            user.DesiredPath = profile.DesiredPath;
-            user.GermanLevel = profile.GermanLevel;
-            user.EnglishLevel = profile.EnglishLevel;
-            user.LanguageCertificate = profile.LanguageCertificate;
-            user.PassportStatus = profile.PassportStatus;
-            user.GermanyConnection = profile.GermanyConnection;
-            user.FinancialSituation = profile.FinancialSituation;
-            user.StartTimeline = profile.StartTimeline;
-            user.RegionFlexibility = profile.RegionFlexibility;
-            user.ProfileUpdatedAt = DateTime.UtcNow;
+            profile.ApplyTo(user);
         }
 
         // The DB write is the real conversion event and must succeed
@@ -506,6 +493,36 @@ public record ProfileSnapshot(
     FinancialSituation? FinancialSituation,
     StartTimeline? StartTimeline,
     RegionFlexibility? RegionFlexibility);
+
+// Same overwrite-on-every-capture semantics used everywhere a profile
+// snapshot gets written onto a User — /leads (below), /auth/verify (after
+// the pending-profile deferred-write security fix, 2026-08-28), and
+// /account/profile (added 2026-08-30). A single shared implementation so
+// the 14-field assignment list can't drift between what used to be three
+// separate copies — found worth doing while adding the third copy for the
+// "already signed in, completed the assessment after" gap (see
+// AccountEndpoints.cs's MapPost("/profile") for the bug this closes).
+public static class ProfileSnapshotExtensions
+{
+    public static void ApplyTo(this ProfileSnapshot profile, User user)
+    {
+        user.Country = profile.Country;
+        user.Age = profile.Age;
+        user.HighestEducation = profile.HighestEducation;
+        user.OccupationField = profile.OccupationField;
+        user.WorkExperience = profile.WorkExperience;
+        user.DesiredPath = profile.DesiredPath;
+        user.GermanLevel = profile.GermanLevel;
+        user.EnglishLevel = profile.EnglishLevel;
+        user.LanguageCertificate = profile.LanguageCertificate;
+        user.PassportStatus = profile.PassportStatus;
+        user.GermanyConnection = profile.GermanyConnection;
+        user.FinancialSituation = profile.FinancialSituation;
+        user.StartTimeline = profile.StartTimeline;
+        user.RegionFlexibility = profile.RegionFlexibility;
+        user.ProfileUpdatedAt = DateTime.UtcNow;
+    }
+}
 
 record SaveResultRequest(
     string Email,
