@@ -49,7 +49,15 @@ public record AdminDocumentResponse(
     DocumentReviewStatus ReviewStatus,
     DateTime? ReviewedAt,
     string? ReviewNote,
-    bool RejectionMessageSent);
+    bool RejectionMessageSent,
+    // Set only when the user explicitly re-uploaded this as a correction
+    // to a specific Denied document (see DocumentsEndpoints.cs). Name is
+    // resolved from the same document list already being built where
+    // possible (list/detail views); null in the single-document PATCH
+    // response, where the frontend's full-refetch-after-review pattern
+    // picks it up moments later anyway.
+    Guid? SupersedesDocumentId,
+    string? SupersedesDocumentName);
 
 public record AdminUserDetailResponse(
     Guid Id,
@@ -349,13 +357,19 @@ public static class DocumentsAdminEndpoints
             user.VerifiedPassportNumber, user.VerifiedPassportExpiryDate, user.VerifiedPassportStatus,
             user.VerifiedHighestEducation, user.VerifiedFieldOfStudy,
             user.VerifiedGermanLevel, user.VerifiedEnglishLevel, user.VerifiedDataUpdatedAt,
-            documents.Select(d => ToAdminDocumentResponse(d, storage)).ToList(),
+            documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
             messages.Select(m => new MessageResponse(m.Id, m.Subject, m.Body, m.CreatedAt, m.ReadAt)).ToList());
 
     private static Task<List<Message>> LoadMessagesAsync(AppDbContext db, Guid userId) =>
         db.Messages.Where(m => m.UserId == userId).OrderByDescending(m => m.CreatedAt).ToListAsync();
 
-    private static AdminDocumentResponse ToAdminDocumentResponse(UserDocument d, AzureBlobStorageService storage)
+    // allDocuments, when provided, resolves SupersedesDocumentName from the
+    // same set already being built (list/detail views) — no extra query.
+    // Omitted (null) in the single-document PATCH response, where the
+    // frontend's full-refetch-after-review pattern picks the name up
+    // moments later regardless.
+    private static AdminDocumentResponse ToAdminDocumentResponse(
+        UserDocument d, AzureBlobStorageService storage, List<UserDocument>? allDocuments = null)
     {
         string? previewUrl = null;
         try
@@ -376,6 +390,10 @@ public static class DocumentsAdminEndpoints
             ? null
             : JsonSerializer.Deserialize<AiExtractedData>(d.AiExtractedDataJson);
 
+        var supersededDocument = d.SupersedesDocumentId is { } supersedesId
+            ? allDocuments?.FirstOrDefault(other => other.Id == supersedesId)
+            : null;
+
         return new AdminDocumentResponse(
             d.Id, d.Name ?? d.OriginalFileName, d.DocumentType, d.OriginalFileName, d.ContentType, d.UploadedAt, previewUrl,
             d.AiVerificationStatus, d.AiExtractedName, d.AiNameMatchesProfile,
@@ -384,7 +402,8 @@ public static class DocumentsAdminEndpoints
             NullIfEmpty(extracted?.HighestEducationLevel), NullIfEmpty(extracted?.FieldOfStudy),
             NullIfEmpty(extracted?.CertifiedLanguage), NullIfEmpty(extracted?.CertifiedLevel),
             flags, d.AiSummary, d.AiVerifiedAt,
-            d.ReviewStatus, d.ReviewedAt, d.ReviewNote, d.RejectionMessageSent);
+            d.ReviewStatus, d.ReviewedAt, d.ReviewNote, d.RejectionMessageSent,
+            d.SupersedesDocumentId, supersededDocument?.Name ?? supersededDocument?.OriginalFileName);
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
@@ -551,7 +570,7 @@ public static class DocumentsAdminEndpoints
             : "Your document needs another look";
         var intro = status == DocumentReviewStatus.FlaggedRed
             ? "One of the documents you submitted couldn't be verified and has been flagged for manual review. Please get in touch so we can resolve it together."
-            : "We reviewed the document you submitted and it doesn't currently meet what we need. Please see the note below and consider re-uploading.";
+            : "We reviewed the document you submitted and it doesn't currently meet what we need. Please see the note below, then go to your account and use \"Upload a corrected version\" on this document to send us a fixed one.";
 
         var body = $"Document: {documentName}\n\n{intro}";
         if (!string.IsNullOrWhiteSpace(note))

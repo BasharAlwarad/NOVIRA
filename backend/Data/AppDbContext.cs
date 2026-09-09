@@ -36,6 +36,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.HasIndex(d => d.UserId);
             entity.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+            // Self-referencing, optional — Restrict (not Cascade/SetNull):
+            // a superseded document is a historical record and must never
+            // silently disappear or get unlinked as a side effect of
+            // something else changing. No document-delete endpoint exists
+            // today anyway, so this is a safety default more than a path
+            // that's actually exercised yet.
+            entity.HasOne<UserDocument>().WithMany().HasForeignKey(d => d.SupersedesDocumentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Message>(entity =>

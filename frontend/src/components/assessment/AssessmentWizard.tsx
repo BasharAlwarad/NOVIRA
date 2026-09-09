@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AssessmentHeader } from '@/components/assessment/AssessmentHeader';
 import {
   AssessmentStep,
@@ -22,7 +22,22 @@ import {
 } from '@/types/assessment';
 
 interface AssessmentWizardProps {
-  onComplete?: (assessment: AssessmentSnapshot) => void;
+  // May return a Promise — handleNext awaits it before navigating away, so
+  // an async completion action (e.g. syncing to the backend) is guaranteed
+  // to finish before redirectTo loads, closing a real race that would
+  // otherwise exist (added alongside self-service profile editing,
+  // 2026-08-30): without awaiting, the destination page could fetch fresh
+  // data before the sync it depends on had actually landed.
+  onComplete?: (assessment: AssessmentSnapshot) => void | Promise<void>;
+  // Where completion navigates to — defaults to the normal funnel's result
+  // page. Self-service profile editing (/assessment/edit, added
+  // 2026-08-30) overrides this to '/account' instead, since an existing
+  // signed-in user correcting an answer has no reason to see the
+  // save-result/opportunity-count/signup funnel content again.
+  redirectTo?: string;
+  // Label on the final step's Next button — defaults to the normal
+  // funnel's "See my result". Edit mode passes "Save changes" instead.
+  finalStepLabel?: string;
 }
 
 const WIZARD_QUESTIONS: ReadonlyArray<AssessmentStepQuestion> =
@@ -64,8 +79,13 @@ function getCurrentStepConfig(currentStepIndex: number) {
   ];
 }
 
-export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
+export function AssessmentWizard({
+  onComplete,
+  redirectTo = '/assessment/result',
+  finalStepLabel = 'See my result',
+}: AssessmentWizardProps) {
   const router = useRouter();
+  const [saving, setSaving] = useState(false);
   const {
     assessment,
     updateAnswer,
@@ -103,15 +123,26 @@ export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
   const isFinalStep =
     assessment.currentStepIndex === WIZARD_QUESTIONS.length - 1;
 
-  const handleNext = () => {
-    if (!canGoNext) {
+  const handleNext = async () => {
+    if (!canGoNext || saving) {
       return;
     }
 
     if (isFinalStep) {
       save();
-      onComplete?.(assessment);
-      router.push('/assessment/result');
+      setSaving(true);
+      try {
+        await onComplete?.(assessment);
+      } catch {
+        // Stay on the page rather than navigate away as if this
+        // succeeded — the caller's onComplete is responsible for
+        // whatever user-facing error messaging it needs; this just
+        // makes sure a failure doesn't silently look like a success.
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      router.push(redirectTo);
       return;
     }
 
@@ -156,12 +187,12 @@ export function AssessmentWizard({ onComplete }: AssessmentWizardProps) {
 
         <div className="rounded-4xl border border-slate-200 bg-white/80 px-5 py-4 shadow-sm shadow-slate-200/50 backdrop-blur">
           <NavigationButtons
-            canGoBack={canGoBack}
-            canGoNext={canGoNext}
+            canGoBack={canGoBack && !saving}
+            canGoNext={canGoNext && !saving}
             isFinalStep={isFinalStep}
             onPrevious={previousStep}
             onNext={handleNext}
-            nextLabel={isFinalStep ? 'See my result' : 'Next'}
+            nextLabel={isFinalStep ? (saving ? 'Saving…' : finalStepLabel) : 'Next'}
           />
         </div>
       </div>

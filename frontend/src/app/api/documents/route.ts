@@ -36,6 +36,7 @@ export async function POST(request: Request) {
   const incomingForm = await request.formData();
   const file = incomingForm.get('file');
   const name = incomingForm.get('name');
+  const supersedesDocumentId = incomingForm.get('supersedesDocumentId');
 
   if (!(file instanceof File) || typeof name !== 'string') {
     return Response.json({ message: 'Missing file or name.' }, { status: 400 });
@@ -44,6 +45,9 @@ export async function POST(request: Request) {
   const outgoingForm = new FormData();
   outgoingForm.append('file', file, file.name);
   outgoingForm.append('name', name);
+  if (typeof supersedesDocumentId === 'string' && supersedesDocumentId) {
+    outgoingForm.append('supersedesDocumentId', supersedesDocumentId);
+  }
 
   const backendResponse = await fetch(`${API_BASE_URL}/documents`, {
     method: 'POST',

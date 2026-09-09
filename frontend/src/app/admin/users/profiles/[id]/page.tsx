@@ -67,6 +67,11 @@ function DocumentCard({
           <p className="mt-1 text-xs text-slate-500">
             {document.originalFileName} · Uploaded {formatDateTime(document.uploadedAt)}
           </p>
+          {document.supersedesDocumentId && (
+            <p className="mt-1 text-xs font-semibold text-amber-700">
+              Corrects: {document.supersedesDocumentName ?? 'a previously denied document'}
+            </p>
+          )}
         </div>
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${REVIEW_STATUS_STYLES[document.reviewStatus]}`}

@@ -84,11 +84,20 @@ function ProfileSection({ account }: { account: Account }) {
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold text-slate-900">Your profile</h2>
-      <p className="mt-1 text-xs text-slate-500">
-        Self-reported from your assessment — not yet independently verified. To change an answer,
-        redo the assessment for now.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Your profile</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Self-reported from your assessment — not yet independently verified.
+          </p>
+        </div>
+        <Link
+          href="/assessment/edit"
+          className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          Edit my profile
+        </Link>
+      </div>
       <dl className="mt-4 grid grid-cols-1 gap-2 text-xs text-slate-600 sm:grid-cols-2">
         {fields.map(([label, value]) => (
           <div key={label}>
@@ -165,6 +174,23 @@ function DocumentsSection({
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Set by clicking "Upload a corrected version" on a Denied document below
+  // — self-service document correction, built 2026-08-30. Re-upload itself
+  // always worked (no limit on adding a new document); what was missing was
+  // an explicit link from the new upload back to what it's fixing, so the
+  // admin doesn't have to match two unrelated-looking rows by eye.
+  const [correcting, setCorrecting] = useState<UserDocumentSummary | null>(null);
+
+  const startCorrection = (doc: UserDocumentSummary) => {
+    setCorrecting(doc);
+    setName(doc.name);
+    setMessage(null);
+  };
+
+  const cancelCorrection = () => {
+    setCorrecting(null);
+    setName('');
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -173,10 +199,15 @@ function DocumentsSection({
     setSubmitting(true);
     setMessage(null);
     try {
-      await uploadDocument(file, name.trim());
+      await uploadDocument(file, name.trim(), correcting?.id);
       setFile(null);
       setName('');
-      setMessage("Uploaded — it's being reviewed now.");
+      setMessage(
+        correcting
+          ? "Corrected version uploaded — it's being reviewed now."
+          : "Uploaded — it's being reviewed now."
+      );
+      setCorrecting(null);
       onUploaded();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Upload failed — try again.');
@@ -193,6 +224,21 @@ function DocumentsSection({
         then a person on our team makes the final call. Add documents one at a time. JPEG, PNG,
         or PDF, up to 10MB.
       </p>
+
+      {correcting && (
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+          <span>
+            Uploading a corrected version of <strong>{correcting.name}</strong>.
+          </span>
+          <button
+            type="button"
+            onClick={cancelCorrection}
+            className="shrink-0 font-semibold underline underline-offset-2 hover:text-amber-900"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-3">
         <input
@@ -240,6 +286,15 @@ function DocumentsSection({
               </div>
               {doc.reviewNote && doc.reviewStatus !== 'Approved' && (
                 <p className="mt-2 text-xs text-slate-500">{doc.reviewNote}</p>
+              )}
+              {doc.reviewStatus === 'Denied' && (
+                <button
+                  type="button"
+                  onClick={() => startCorrection(doc)}
+                  className="mt-2 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                >
+                  Upload a corrected version
+                </button>
               )}
             </div>
           ))
@@ -367,6 +422,7 @@ export default function AccountPage() {
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const [documents, setDocuments] = useState<UserDocumentSummary[] | null>(null);
   const [messages, setMessages] = useState<Message[] | null>(null);
+  const [justUpdated, setJustUpdated] = useState(false);
 
   const loadDocuments = useCallback(() => {
     listMyDocuments()
@@ -405,6 +461,20 @@ export default function AccountPage() {
         setState({ status: error instanceof NoAccountSession ? 'not-signed-in' : 'error' });
       });
   }, [loadDocuments, loadMessages]);
+
+  // Landed here from /assessment/edit's redirectTo="/account?updated=1" —
+  // read directly off window.location rather than useSearchParams() to
+  // avoid needing a <Suspense> boundary just for this. Cleared from the URL
+  // immediately so a refresh doesn't keep re-showing the banner.
+  useEffect(() => {
+    // One-time sync from an external, client-only source (the URL) on
+    // mount — same pattern as assessment/result/page.tsx's own load.
+    if (new URLSearchParams(window.location.search).get('updated') === '1') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setJustUpdated(true);
+      router.replace('/account');
+    }
+  }, [router]);
 
   // A new message won't otherwise appear until the page is manually
   // reloaded — this is what actually fixes that, without the complexity of
@@ -447,6 +517,12 @@ export default function AccountPage() {
 
         {state.status === 'loaded' && (
           <p className="mt-2 text-sm text-slate-600">{state.account.email}</p>
+        )}
+
+        {justUpdated && (
+          <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800">
+            Profile updated.
+          </p>
         )}
 
         <div className="mt-8 space-y-6">

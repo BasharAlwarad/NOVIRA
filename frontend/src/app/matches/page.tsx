@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { getCurrentUser, logout } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
 import type { MatchResult } from '@/lib/contracts/matches';
@@ -60,8 +61,75 @@ function MatchCard({ match }: { match: MatchResult }) {
   );
 }
 
-export default function MatchesPage() {
+// Split by path (built 2026-09-09) — was one flat list across both real
+// paths; sectioning makes each path's own count/empty-state visible
+// instead of a single blended total. emptyMessage is shown only when the
+// section has real (if currently empty) data behind it — null renders a
+// bare, unexplained "0" instead, for the Work section below, which has no
+// backing data or matching logic at all (Opportunity's own path type
+// doesn't even have an Employment value) — deliberately no messaging about
+// scope or timing here, just the fact of the count.
+function MatchSection({
+  matches,
+  emptyMessage,
+}: {
+  matches: MatchResult[];
+  emptyMessage: string | null;
+}) {
+  return (
+    <div className="space-y-4">
+      {matches.length === 0 && (
+        <p className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          {emptyMessage ?? '0 matching opportunities found.'}
+        </p>
+      )}
+      {matches.map((match) => (
+        <MatchCard key={match.opportunityId} match={match} />
+      ))}
+    </div>
+  );
+}
+
+type MatchTab = 'Ausbildung' | 'University' | 'Work';
+const MATCH_TABS: MatchTab[] = ['Ausbildung', 'University', 'Work'];
+
+// Tab navigation between the three sections (added 2026-09-09, on top of
+// the same-day sectioning above) — with a real Ausbildung batch running
+// 25-30+ matches deep, showing all three sections stacked made for a very
+// long scroll; tabs let the user jump straight to the one they care about
+// instead. Backed by a `?section=` URL search param, not local state, so a
+// link straight to e.g. "University matches" is bookmarkable/shareable —
+// same pattern as the admin opportunities page's own status filter tabs.
+function SectionTabs({ counts }: { counts: Record<MatchTab, number> }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeTab = (searchParams.get('section') as MatchTab | null) ?? 'Ausbildung';
+
+  return (
+    <div className="flex gap-2">
+      {MATCH_TABS.map((tab) => {
+        const active = tab === activeTab;
+        const href = tab === 'Ausbildung' ? pathname : `${pathname}?section=${tab}`;
+        return (
+          <Link
+            key={tab}
+            href={href}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              active ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {tab} ({counts[tab]})
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function MatchesPageContent() {
   const [state, setState] = useState<PageState>({ status: 'loading' });
+  const searchParams = useSearchParams();
+  const activeTab = (searchParams.get('section') as MatchTab | null) ?? 'Ausbildung';
 
   useEffect(() => {
     let cancelled = false;
@@ -184,20 +252,47 @@ export default function MatchesPage() {
             </div>
           )}
 
-          {state.status === 'loaded' && state.matches.length === 0 && state.hasProfile && (
-            <p className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-              No matching opportunities yet — check back soon as more real
-              opportunities are added.
-            </p>
-          )}
+          {state.status === 'loaded' && state.hasProfile && (
+            <>
+              <SectionTabs
+                counts={{
+                  Ausbildung: state.matches.filter((match) => match.path === 'Ausbildung').length,
+                  University: state.matches.filter((match) => match.path === 'University').length,
+                  Work: 0,
+                }}
+              />
 
-          {state.status === 'loaded' &&
-            state.matches.map((match) => (
-              <MatchCard key={match.opportunityId} match={match} />
-            ))}
+              <div className="mt-6">
+                {activeTab === 'Ausbildung' && (
+                  <MatchSection
+                    matches={state.matches.filter((match) => match.path === 'Ausbildung')}
+                    emptyMessage="No matching Ausbildung opportunities yet — check back soon as more real opportunities are added."
+                  />
+                )}
+                {activeTab === 'University' && (
+                  <MatchSection
+                    matches={state.matches.filter((match) => match.path === 'University')}
+                    emptyMessage="No matching university opportunities yet — check back soon as more real opportunities are added."
+                  />
+                )}
+                {activeTab === 'Work' && <MatchSection matches={[]} emptyMessage={null} />}
+              </div>
+            </>
+          )}
         </div>
       </section>
       <SiteFooter />
     </main>
+  );
+}
+
+// useSearchParams() requires a <Suspense> boundary or the production build
+// fails to prerender the route — same fix already applied elsewhere
+// (/auth/verify/page.tsx, the admin opportunities path pages).
+export default function MatchesPage() {
+  return (
+    <Suspense fallback={null}>
+      <MatchesPageContent />
+    </Suspense>
   );
 }

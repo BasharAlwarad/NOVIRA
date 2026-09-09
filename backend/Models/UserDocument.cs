@@ -101,4 +101,16 @@ public class UserDocument
     // them in-app — same "provider failure must be visible" discipline as
     // Users.emailSent on /leads, just applied to a smaller stake now.
     public bool RejectionMessageSent { get; set; }
+
+    // Optional link from a re-upload to the Denied document it's correcting
+    // (built 2026-08-30, self-service document correction) — set only when
+    // the user explicitly chooses "upload a corrected version" on a
+    // specific Denied document, never inferred/guessed. No navigation
+    // property (same minimal Fluent-API-FK-only style as UserId above) —
+    // deliberately not a cascading FK either, since the superseded document
+    // must never disappear just because something referencing it changes;
+    // see AppDbContext.cs for the FK configuration (Restrict, not Cascade).
+    // Lets the admin review UI show "this corrects <name>, denied <date>"
+    // instead of two unrelated-looking rows.
+    public Guid? SupersedesDocumentId { get; set; }
 }

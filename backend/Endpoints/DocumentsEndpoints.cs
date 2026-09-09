@@ -15,7 +15,8 @@ public record UserDocumentResponse(
     AiVerificationStatus AiVerificationStatus,
     DocumentReviewStatus ReviewStatus,
     DateTime? ReviewedAt,
-    string? ReviewNote);
+    string? ReviewNote,
+    Guid? SupersedesDocumentId);
 
 // Signed-in-user-facing document upload — the boundary CLAUDE.md's four-level
 // user-data model calls Level 2. Session-authenticated (SessionAuthFilter),
@@ -25,9 +26,19 @@ public static class DocumentsEndpoints
     private const long MaxUploadSizeBytes = 10 * 1024 * 1024; // 10 MB
     private static readonly HashSet<string> AllowedContentTypes = ["image/jpeg", "image/png", "application/pdf"];
 
+    // A soft ceiling on total documents per account (built 2026-08-30,
+    // alongside self-service document correction) — every upload triggers a
+    // real, paid Claude vision call, and re-uploading after a Deny has no
+    // cap otherwise. Generous enough for a few honest corrections across a
+    // few document types, not so high it stops meaning anything as a real
+    // cost/abuse control. A flat per-account cap, not a more elaborate
+    // per-document-type attempt limit — fewer moving parts for a problem
+    // this already solves well enough at MVP scale.
+    private const int MaxDocumentsPerUser = 10;
+
     private static UserDocumentResponse ToResponse(UserDocument d) => new(
         d.Id, d.Name ?? d.OriginalFileName, d.DocumentType, d.OriginalFileName, d.UploadedAt,
-        d.AiVerificationStatus, d.ReviewStatus, d.ReviewedAt, d.ReviewNote);
+        d.AiVerificationStatus, d.ReviewStatus, d.ReviewedAt, d.ReviewNote, d.SupersedesDocumentId);
 
     public static void MapDocumentsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -75,6 +86,14 @@ public static class DocumentsEndpoints
                     statusCode: StatusCodes.Status403Forbidden);
             }
 
+            var documentCount = await db.UserDocuments.CountAsync(d => d.UserId == user.Id);
+            if (documentCount >= MaxDocumentsPerUser)
+            {
+                return Results.Json(
+                    new { message = $"You've reached the limit of {MaxDocumentsPerUser} documents on this account. Contact support if you need to upload more." },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+
             if (!httpContext.Request.HasFormContentType)
             {
                 return Results.BadRequest(new { message = "Expected multipart/form-data." });
@@ -109,6 +128,33 @@ public static class DocumentsEndpoints
                 return Results.BadRequest(new { message = "Only JPEG, PNG, and PDF files are supported." });
             }
 
+            // Optional — set only when the user explicitly chose "upload a
+            // corrected version" on a specific Denied document (see
+            // DocumentsSection.tsx). Validated, not trusted blindly: must be
+            // this user's own document, and must currently be Denied — a
+            // Pending or Approved document has nothing to "correct" yet, and
+            // FlaggedRed already blocks this whole endpoint before this
+            // point is ever reached (see the FraudFlagged check above).
+            Guid? supersedesDocumentId = null;
+            var supersedesRaw = form["supersedesDocumentId"].ToString();
+            if (!string.IsNullOrWhiteSpace(supersedesRaw))
+            {
+                if (!Guid.TryParse(supersedesRaw, out var parsedSupersedesId))
+                {
+                    return Results.BadRequest(new { message = "Invalid document reference." });
+                }
+
+                var supersededDocument = await db.UserDocuments
+                    .FirstOrDefaultAsync(d => d.Id == parsedSupersedesId && d.UserId == user.Id);
+
+                if (supersededDocument is null || supersededDocument.ReviewStatus != DocumentReviewStatus.Denied)
+                {
+                    return Results.BadRequest(new { message = "That document can't be corrected right now." });
+                }
+
+                supersedesDocumentId = parsedSupersedesId;
+            }
+
             byte[] fileBytes;
             using (var memoryStream = new MemoryStream())
             {
@@ -126,6 +172,7 @@ public static class DocumentsEndpoints
                 OriginalFileName = file.FileName,
                 ContentType = file.ContentType,
                 StorageBlobName = string.Empty, // set below, before the row is persisted
+                SupersedesDocumentId = supersedesDocumentId,
             };
 
             using (var uploadStream = new MemoryStream(fileBytes))

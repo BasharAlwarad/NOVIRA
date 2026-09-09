@@ -23,10 +23,20 @@ export async function listMyDocuments(): Promise<UserDocumentSummary[]> {
 // documentType is no longer chosen by the uploader — the AI determines it
 // from what the document actually is (see backend/Models/UserDocument.cs).
 // name is the user's own label for the document and is required.
-export async function uploadDocument(file: File, name: string): Promise<UserDocumentSummary> {
+// supersedesDocumentId (self-service document correction, built 2026-08-30)
+// is set only when this upload is explicitly correcting a specific Denied
+// document — see DocumentsSection.tsx's "Upload a corrected version".
+export async function uploadDocument(
+  file: File,
+  name: string,
+  supersedesDocumentId?: string
+): Promise<UserDocumentSummary> {
   const form = new FormData();
   form.append('file', file, file.name);
   form.append('name', name);
+  if (supersedesDocumentId) {
+    form.append('supersedesDocumentId', supersedesDocumentId);
+  }
 
   const response = await fetch('/api/documents', { method: 'POST', body: form });
 

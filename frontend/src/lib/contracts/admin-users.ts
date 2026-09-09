@@ -46,6 +46,14 @@ export interface AdminDocument {
   reviewedAt: string | null;
   reviewNote: string | null;
   rejectionMessageSent: boolean;
+  // Set only when the user explicitly re-uploaded this as a correction to
+  // a specific Denied document (self-service document correction, built
+  // 2026-08-30). supersedesDocumentName is resolved server-side where
+  // possible (list/detail views) — null right after a single-document
+  // review action, where the frontend's full-refetch-after-review pattern
+  // picks it up moments later regardless.
+  supersedesDocumentId: string | null;
+  supersedesDocumentName: string | null;
 }
 
 // ProfileSnapshot's fields are spread in directly (fullName/createdAt/fraud

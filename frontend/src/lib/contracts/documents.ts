@@ -16,4 +16,8 @@ export interface UserDocumentSummary {
   reviewStatus: DocumentReviewStatus;
   reviewedAt: string | null;
   reviewNote: string | null;
+  // Set only when this upload was explicitly submitted as a correction to
+  // a specific Denied document (self-service document correction, built
+  // 2026-08-30) — see DocumentsSection.tsx's "Upload a corrected version".
+  supersedesDocumentId: string | null;
 }

@@ -110,6 +110,77 @@ const REGION_FLEXIBILITY_MAP: Record<
   [RegionFlexibility.NotSureYet]: 'NotSureYet',
 };
 
+// Backend string -> frontend enum, the exact inverse of each MAP above —
+// built by inverting the same tables rather than hand-typing a second set,
+// so the two directions can never drift apart (added 2026-08-30 for
+// self-service profile editing: pre-filling the assessment wizard from an
+// already-saved account requires going the other way from buildProfileSnapshot).
+function invert<TEnum extends string, TBackend extends string>(
+  map: Record<TEnum, TBackend>
+): Record<TBackend, TEnum> {
+  return Object.fromEntries(
+    Object.entries(map).map(([enumValue, backendValue]) => [backendValue, enumValue])
+  ) as Record<TBackend, TEnum>;
+}
+
+const EDUCATION_LEVEL_REVERSE_MAP = invert(EDUCATION_LEVEL_MAP);
+const LANGUAGE_LEVEL_REVERSE_MAP = invert(LANGUAGE_LEVEL_MAP);
+const WORK_EXPERIENCE_REVERSE_MAP = invert(WORK_EXPERIENCE_MAP);
+const DESIRED_PATH_REVERSE_MAP = invert(DESIRED_PATH_MAP);
+const LANGUAGE_CERTIFICATE_REVERSE_MAP = invert(LANGUAGE_CERTIFICATE_MAP);
+const PASSPORT_STATUS_REVERSE_MAP = invert(PASSPORT_STATUS_MAP);
+const GERMANY_CONNECTION_REVERSE_MAP = invert(GERMANY_CONNECTION_MAP);
+const FINANCIAL_SITUATION_REVERSE_MAP = invert(FINANCIAL_SITUATION_MAP);
+const START_TIMELINE_REVERSE_MAP = invert(START_TIMELINE_MAP);
+const REGION_FLEXIBILITY_REVERSE_MAP = invert(REGION_FLEXIBILITY_MAP);
+
+// Only the fields the wizard's questions actually populate — deliberately
+// Partial, not a full AssessmentAnswers, since a profile-less account (or
+// one only partially captured) may be missing fields; the caller merges
+// this over createDefaultAssessmentAnswers() rather than assuming every
+// field is present.
+export function assessmentAnswersFromProfileSnapshot(
+  profile: ProfileSnapshot
+): Partial<AssessmentAnswers> {
+  return {
+    country: profile.country ?? '',
+    age: profile.age ?? null,
+    highestEducation: profile.highestEducation
+      ? EDUCATION_LEVEL_REVERSE_MAP[profile.highestEducation]
+      : null,
+    // occupationField is stored backend-side as a plain string matching the
+    // frontend's own 110-value OccupationField enum keys exactly (see
+    // Opportunity.cs's comment on why it's not a duplicated C# enum) — safe
+    // to cast straight through, no lookup table needed like the other
+    // enum-backed fields above.
+    occupationField: (profile.occupationField as AssessmentAnswers['occupationField']) ?? null,
+    workExperience: profile.workExperience
+      ? WORK_EXPERIENCE_REVERSE_MAP[profile.workExperience]
+      : null,
+    desiredPath: profile.desiredPath ? DESIRED_PATH_REVERSE_MAP[profile.desiredPath] : null,
+    germanLevel: profile.germanLevel ? LANGUAGE_LEVEL_REVERSE_MAP[profile.germanLevel] : null,
+    englishLevel: profile.englishLevel ? LANGUAGE_LEVEL_REVERSE_MAP[profile.englishLevel] : null,
+    languageCertificate: profile.languageCertificate
+      ? LANGUAGE_CERTIFICATE_REVERSE_MAP[profile.languageCertificate]
+      : null,
+    passportStatus: profile.passportStatus
+      ? PASSPORT_STATUS_REVERSE_MAP[profile.passportStatus]
+      : null,
+    germanyConnection: profile.germanyConnection
+      ? profile.germanyConnection.map((connection) => GERMANY_CONNECTION_REVERSE_MAP[connection])
+      : [],
+    financialSituation: profile.financialSituation
+      ? FINANCIAL_SITUATION_REVERSE_MAP[profile.financialSituation]
+      : null,
+    startTimeline: profile.startTimeline
+      ? START_TIMELINE_REVERSE_MAP[profile.startTimeline]
+      : null,
+    regionFlexibility: profile.regionFlexibility
+      ? REGION_FLEXIBILITY_REVERSE_MAP[profile.regionFlexibility]
+      : null,
+  };
+}
+
 export function buildProfileSnapshot(answers: AssessmentAnswers): ProfileSnapshot {
   return {
     country: answers.country || null,
