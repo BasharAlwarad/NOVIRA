@@ -1,4 +1,5 @@
 import type { Account } from '@/lib/contracts/account';
+import type { ProfileSnapshot } from '@/lib/contracts/leads';
 
 export class NotSignedInError extends Error {
   constructor() {
@@ -26,4 +27,26 @@ export async function deleteMyAccount(): Promise<void> {
   if (!response.ok) {
     throw new Error('Failed to delete your account.');
   }
+}
+
+// Syncs the caller's current (already-authenticated) account with a freshly
+// computed profile snapshot — the missing path for someone who signed in
+// FIRST and only completed the assessment afterward, while already signed
+// in (found live 2026-08-30; see SignupPrompt.tsx and
+// backend/Endpoints/AccountEndpoints.cs's POST /profile).
+export async function updateMyProfile(profile: ProfileSnapshot): Promise<{ hasProfile: boolean }> {
+  const response = await fetch('/api/account/profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(profile),
+  });
+
+  if (response.status === 401) {
+    throw new NotSignedInError();
+  }
+  if (!response.ok) {
+    throw new Error('Failed to sync your profile.');
+  }
+
+  return (await response.json()) as { hasProfile: boolean };
 }

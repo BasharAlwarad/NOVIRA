@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { logout } from '@/lib/api/auth';
+import { getCurrentUser, logout } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
 import type { MatchResult } from '@/lib/contracts/matches';
 import { SiteFooter } from '@/components/site-footer';
@@ -12,7 +12,7 @@ type PageState =
   | { status: 'loading' }
   | { status: 'not-signed-in' }
   | { status: 'error' }
-  | { status: 'loaded'; matches: MatchResult[] };
+  | { status: 'loaded'; matches: MatchResult[]; hasProfile: boolean };
 
 const FIT_STYLES: Record<string, string> = {
   'Strong fit': 'bg-emerald-50 text-emerald-700',
@@ -66,10 +66,22 @@ export default function MatchesPage() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchMyMatches()
-      .then((matches) => {
+    // hasProfile is fetched alongside the matches themselves so the empty
+    // state (0 matches) can tell apart two very different situations: a
+    // real profile that genuinely has no current fit ("check back soon" is
+    // honest advice there) vs. an account with no self-reported profile at
+    // all — e.g. one that signed up and went straight to uploading
+    // documents without the assessment, a real path since the 2026-08-28
+    // "sign up from anywhere" reframe (see CLAUDE.md's Sign-up UX entry).
+    // For that second case, no amount of new opportunity data will ever
+    // produce a match — OccupationField (the primary hard filter) has no
+    // Verified* equivalent — so "check back soon" is actively misleading;
+    // only completing the assessment fixes it. Found live 2026-08-30 on a
+    // real account in exactly this state.
+    Promise.all([fetchMyMatches(), getCurrentUser()])
+      .then(([matches, user]) => {
         if (!cancelled) {
-          setState({ status: 'loaded', matches });
+          setState({ status: 'loaded', matches, hasProfile: user?.hasProfile ?? false });
         }
       })
       .catch((error) => {
@@ -151,7 +163,28 @@ export default function MatchesPage() {
             </p>
           )}
 
-          {state.status === 'loaded' && state.matches.length === 0 && (
+          {state.status === 'loaded' && state.matches.length === 0 && !state.hasProfile && (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5">
+              <p className="text-sm font-semibold text-amber-900">
+                We don&apos;t have your profile yet
+              </p>
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                Matching runs against your assessment answers (occupation
+                field, education, language level, and more) — your account
+                doesn&apos;t have any yet, so there&apos;s nothing to match
+                against regardless of how many opportunities exist. Take the
+                free assessment to see real matches.
+              </p>
+              <Link
+                href="/assessment"
+                className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-amber-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-amber-300"
+              >
+                Take the assessment
+              </Link>
+            </div>
+          )}
+
+          {state.status === 'loaded' && state.matches.length === 0 && state.hasProfile && (
             <p className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
               No matching opportunities yet — check back soon as more real
               opportunities are added.

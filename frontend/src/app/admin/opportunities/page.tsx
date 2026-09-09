@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   AdminUnauthorizedError,
   createOpportunity,
+  generateUniversity,
   listOpportunities,
   syncAusbildung,
   updateOpportunityStatus,
@@ -155,6 +156,11 @@ function OpportunityRow({
         )}
         {opportunity.requiresCertifiedLanguageProof && (
           <Chip>Certified proof required</Chip>
+        )}
+        {opportunity.source === 'AiResearch' && (
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+            AI-researched — verify source link
+          </span>
         )}
       </div>
 
@@ -505,6 +511,8 @@ export default function AdminOpportunitiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [generatingAusbildung, setGeneratingAusbildung] = useState(false);
   const [ausbildungMessage, setAusbildungMessage] = useState<string | null>(null);
+  const [generatingUniversity, setGeneratingUniversity] = useState(false);
+  const [universityMessage, setUniversityMessage] = useState<string | null>(null);
 
   const loadOpportunities = useCallback(async () => {
     setError(null);
@@ -565,6 +573,33 @@ export default function AdminOpportunitiesPage() {
     }
   };
 
+  const handleGenerateUniversity = async () => {
+    if (generatingUniversity) return;
+
+    setGeneratingUniversity(true);
+    setUniversityMessage(null);
+    try {
+      const { added, fieldsResearched, fieldsSkipped, estimatedCostUsd } = await generateUniversity(adminKey);
+      const costLine = `Researched ${fieldsResearched} field${fieldsResearched === 1 ? '' : 's'}${
+        fieldsSkipped > 0 ? ` (${fieldsSkipped} skipped — already well covered)` : ''
+      }, ~$${estimatedCostUsd.toFixed(2)} spent.`;
+      setUniversityMessage(
+        added > 0
+          ? `Added ${added} new program${added === 1 ? '' : 's'} as Pending — verify the source link before approving. ${costLine}`
+          : `No new, currently-open programs found on this run — everything found was already in the list, or nothing genuinely relevant turned up. ${costLine}`
+      );
+      await loadOpportunities();
+    } catch (err) {
+      if (err instanceof AdminUnauthorizedError) {
+        clearAdminKey();
+      } else {
+        setUniversityMessage('Failed to generate — try again.');
+      }
+    } finally {
+      setGeneratingUniversity(false);
+    }
+  };
+
   const handleAddOpportunity = async (request: CreateOpportunityRequest) => {
     try {
       await createOpportunity(adminKey, request);
@@ -620,14 +655,16 @@ export default function AdminOpportunitiesPage() {
               title="University"
               opportunities={university}
               onDecide={handleDecide}
+              message={universityMessage}
               action={
                 <button
                   type="button"
-                  disabled
-                  title="Not built yet — needs an AI-assisted research pipeline with a source-credibility design (Matching-Algorithm-Study.md §8), unlike Ausbildung's government API sync."
-                  className="cursor-not-allowed rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-400"
+                  onClick={handleGenerateUniversity}
+                  disabled={generatingUniversity}
+                  title="Searches daad.de, study-in-germany.de, and hochschulkompass.de only — see Matching-Algorithm-Study.md §8 for the source-credibility design."
+                  className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Generate University (coming soon)
+                  {generatingUniversity ? 'Generating…' : 'Generate University'}
                 </button>
               }
             />

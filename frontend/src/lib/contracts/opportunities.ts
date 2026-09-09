@@ -1,6 +1,6 @@
 export type OpportunityPath = 'University' | 'Ausbildung';
 export type OpportunityStatus = 'Pending' | 'Approved' | 'Denied';
-export type OpportunitySource = 'Manual' | 'Bundesagentur';
+export type OpportunitySource = 'Manual' | 'Bundesagentur' | 'AiResearch';
 
 // Mirrors backend/Models/Opportunity.cs's LanguageLevel — CEFR values plus
 // the frontend's casual englishLevel scale (Beginner/Intermediate/Advanced/

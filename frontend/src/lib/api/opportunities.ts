@@ -53,6 +53,25 @@ export async function syncAusbildung(adminKey: string): Promise<{ added: number 
   return (await response.json()) as { added: number };
 }
 
+export interface GenerateUniversityResult {
+  added: number;
+  fieldsResearched: number;
+  fieldsSkipped: number;
+  estimatedCostUsd: number;
+}
+
+export async function generateUniversity(adminKey: string): Promise<GenerateUniversityResult> {
+  const response = await adminFetch('/api/admin/opportunities/generate-university', adminKey, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to generate University opportunities.');
+  }
+
+  return (await response.json()) as GenerateUniversityResult;
+}
+
 export async function createOpportunity(
   adminKey: string,
   request: CreateOpportunityRequest

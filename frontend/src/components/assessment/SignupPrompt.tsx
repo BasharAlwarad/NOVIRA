@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { updateMyProfile } from '@/lib/api/account';
 import { getCurrentUser, RateLimitedError, requestMagicLink } from '@/lib/api/auth';
 import type { ProfileSnapshot } from '@/lib/contracts/leads';
 
@@ -28,6 +29,16 @@ type PromptState =
  * already use — without it, a visitor who signs up here without ever using
  * SaveResultPrompt first would get a Users row with no profile at all, and
  * /matches' hard filters would then correctly find nothing to show them.
+ *
+ * The already-signed-in branch also syncs `profile` onto the account
+ * (2026-08-30) — closing a real gap found live: every other profile-capture
+ * path only ever sends a profile at *sign-in time*. A visitor who signs in
+ * FIRST (e.g. via /signin, no local assessment yet) and only completes the
+ * assessment afterward, while already signed in, used to hit this exact
+ * "already signed in, view your matches" branch with no path back — the
+ * freshly-computed profile was silently never sent anywhere, and /matches
+ * kept showing 0 with no explanation. Best-effort: if the sync call fails,
+ * the link to /matches still renders rather than blocking the page on it.
  */
 export function SignupPrompt({ profile }: { profile: ProfileSnapshot }) {
   const [state, setState] = useState<PromptState>('checking-session');
@@ -38,7 +49,13 @@ export function SignupPrompt({ profile }: { profile: ProfileSnapshot }) {
     let cancelled = false;
 
     getCurrentUser()
-      .then((user) => {
+      .then(async (user) => {
+        if (cancelled) return;
+
+        if (user) {
+          await updateMyProfile(profile).catch(() => {});
+        }
+
         if (!cancelled) {
           setState(user ? 'already-signed-in' : 'idle');
         }
@@ -52,6 +69,12 @@ export function SignupPrompt({ profile }: { profile: ProfileSnapshot }) {
     return () => {
       cancelled = true;
     };
+    // profile is intentionally omitted: it's a freshly-derived object every
+    // render (buildProfileSnapshot(answers) in the parent), and this effect
+    // is meant to run once on mount only, matching every other one-time-
+    // sync effect in this codebase — re-running on every profile identity
+    // change would re-trigger the sync/session-check pointlessly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (state === 'checking-session') {
