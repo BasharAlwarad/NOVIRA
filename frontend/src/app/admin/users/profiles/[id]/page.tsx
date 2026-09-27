@@ -160,6 +160,10 @@ function DocumentCard({
                 <dd className="inline">{document.aiFieldOfStudy || '—'}</dd>
               </div>
               <div>
+                <dt className="inline font-semibold">Occupation field: </dt>
+                <dd className="inline">{document.aiOccupationField || '—'}</dd>
+              </div>
+              <div>
                 <dt className="inline font-semibold">Certified language/level: </dt>
                 <dd className="inline">
                   {document.aiCertifiedLanguage && document.aiCertifiedLevel
@@ -760,8 +764,10 @@ export default function AdminUserProfilePage() {
             ['Passport expiry', user.verifiedPassportExpiryDate],
             ['Highest education', user.verifiedHighestEducation],
             ['Field of study', user.verifiedFieldOfStudy],
+            ['Occupation field', user.verifiedOccupationField],
             ['German level', user.verifiedGermanLevel],
             ['English level', user.verifiedEnglishLevel],
+            ['Certified language proof', user.verifiedHasCertifiedLanguageProof ? 'Yes' : null],
           ];
           const verifiedFields = allVerifiedFields.filter(([, value]) => value !== null);
 

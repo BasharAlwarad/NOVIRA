@@ -126,6 +126,27 @@ public class User
     public string? VerifiedFieldOfStudy { get; set; }
     public LanguageLevel? VerifiedGermanLevel { get; set; }
     public LanguageLevel? VerifiedEnglishLevel { get; set; }
+    // Added 2026-09-11 to close a real gap: OccupationField is the primary
+    // hard filter in MatchingService, and until now it had no Verified*
+    // counterpart at all — every other Verified* field above already won
+    // over its self-reported counterpart in matching, but occupation field
+    // never could, no matter how many documents got approved. Plain string
+    // (not a duplicated 110-value C# enum), matching User.OccupationField's
+    // own type — see Opportunity.cs's comment on why. Populated only from
+    // an approved EducationCertificate, and only when the AI extraction is
+    // confident enough to pick one of the 110 canonical values — see
+    // DocumentVerificationService's schema and ApplyVerifiedDataFromDocument
+    // for the "drop rather than guess" gate, same discipline as
+    // OccupationFieldMapper.cs.
+    public string? VerifiedOccupationField { get; set; }
+    // Whether an Approved LanguageCertificate document exists for this
+    // account (added 2026-09-11, same gap as above) — MatchingService's
+    // certified-proof soft-factor bonus previously only ever checked the
+    // self-reported LanguageCertificate dropdown, even when an approved
+    // certificate document already proved it directly. Additive with the
+    // self-report (an OR, not an override) — a verified certificate should
+    // never make the bonus disappear, only add confidence to it.
+    public bool VerifiedHasCertifiedLanguageProof { get; set; }
     public DateTime? VerifiedDataUpdatedAt { get; set; }
 
     // Set when an admin flags one of this user's documents "FlaggedRed"

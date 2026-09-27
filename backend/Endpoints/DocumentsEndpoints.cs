@@ -218,6 +218,7 @@ public static class DocumentsEndpoints
                     result.DocumentNumber,
                     result.HighestEducationLevel,
                     result.FieldOfStudy,
+                    result.OccupationField,
                     result.CertifiedLanguage,
                     result.CertifiedLevel,
                 });

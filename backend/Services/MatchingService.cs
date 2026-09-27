@@ -73,9 +73,18 @@ public static class MatchingService
         }
 
         // Occupation relevance — recommending an unrelated field undermines
-        // trust, so this excludes rather than down-ranks.
+        // trust, so this excludes rather than down-ranks. Prefers the
+        // Level-3 verified value (set only once an admin approves an
+        // education certificate whose field of study the AI could
+        // confidently map to one of the 110 canonical categories) over the
+        // Level-1 self-report when both exist — added 2026-09-11, closing a
+        // real gap: every other hard/soft factor already preferred verified
+        // data when present, but this one (the single most consequential
+        // filter here) had no verified counterpart at all until now — see
+        // User.VerifiedOccupationField's own comment.
+        var occupationField = profile.VerifiedOccupationField ?? profile.OccupationField;
         if (opportunity.OccupationField is not null
-            && !string.Equals(opportunity.OccupationField, profile.OccupationField, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(opportunity.OccupationField, occupationField, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -141,10 +150,17 @@ public static class MatchingService
 
         if (opportunity.RequiresCertifiedLanguageProof)
         {
+            // Additive with the self-report, not a replacement (added
+            // 2026-09-11) — an approved LanguageCertificate document is
+            // direct, unambiguous proof of exactly this, but a verified
+            // "yes" should only ever add confidence, never make a
+            // self-reported "yes" go away if a document somehow wasn't
+            // (yet) uploaded for it.
             var hasCertificate = profile.LanguageCertificate
                 is LanguageCertificateStatus.CertifiedGerman
                 or LanguageCertificateStatus.CertifiedEnglish
-                or LanguageCertificateStatus.CertifiedBoth;
+                or LanguageCertificateStatus.CertifiedBoth
+                || profile.VerifiedHasCertifiedLanguageProof;
 
             if (hasCertificate)
             {
@@ -155,6 +171,35 @@ public static class MatchingService
             {
                 score -= 1;
                 factors.Add(new MatchFactor("A certified language exam result will be needed before applying", false));
+            }
+        }
+
+        // Overqualification adjustment (added 2026-09-11) — a real gap
+        // identified in Matching-Algorithm-Study.md §6's own research: a
+        // synthetic senior-professional profile (Bachelor's+, 5+ years'
+        // experience) scored "Strong fit" for Ausbildung in testing, when
+        // in reality someone that experienced would rarely want to restart
+        // as an entry-level apprentice. That finding was specifically about
+        // the separate Tier 1 verdict engine (assessment-verdict.ts,
+        // pre-signup, no real opportunity involved); this closes the same
+        // conceptual gap here, where it actually matters more — a real
+        // "Strong fit" label on a real opportunity. A soft down-rank, not a
+        // hard exclusion: Ausbildung isn't wrong for an overqualified
+        // profile, just usually not their best fit, so the listing still
+        // surfaces with an honest explanation rather than being hidden.
+        // Same Verified-over-self-report preference as every other factor
+        // here (education filter above, language levels below).
+        if (opportunity.Path == OpportunityPath.Ausbildung)
+        {
+            var highestEducation = profile.VerifiedHighestEducation ?? profile.HighestEducation;
+            var isHighlyEducated = highestEducation is { } education && education >= EducationLevel.Bachelors;
+            var isExperienced = profile.WorkExperience is WorkExperience.TwoToFiveYears or WorkExperience.MoreThanFiveYears;
+
+            if (isHighlyEducated && isExperienced)
+            {
+                score -= 3;
+                factors.Add(new MatchFactor(
+                    "Your education and work experience level typically fit University or direct employment better than an entry-level Ausbildung", false));
             }
         }
 
@@ -174,6 +219,65 @@ public static class MatchingService
         {
             score += 1;
             factors.Add(new MatchFactor("Tuition-free", true));
+        }
+
+        // Start timeline (added 2026-09-11) — a real gap: StartTimeline was
+        // collected in the assessment and StartDate exists on Opportunity
+        // (populated for many synced Ausbildung listings), but neither was
+        // ever compared against the other anywhere in matching. Skipped
+        // entirely when either side has nothing to compare (no StartDate on
+        // this listing, or the user selected "still exploring" — genuinely
+        // undecided, not a preference to score against). Deliberately
+        // additive-only, no penalty for a mismatch: unlike the education/
+        // language/overqualification factors above (real capability or
+        // suitability gaps), a start date that doesn't line up with a
+        // stated preference is a scheduling detail, not a fit problem —
+        // penalizing it would unfairly tank an otherwise strong match over
+        // something this soft. Same "approximate windows, not exact-day
+        // math" precision as everywhere else timelines get compared in
+        // this app.
+        if (opportunity.StartDate is { } startDate && profile.StartTimeline is { } timeline
+            && timeline != StartTimeline.StillExploring)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var matchesTimeline = timeline switch
+            {
+                StartTimeline.AsSoonAsPossible => startDate <= today.AddMonths(6),
+                StartTimeline.SixToTwelveMonths => startDate > today.AddMonths(5) && startDate <= today.AddMonths(13),
+                StartTimeline.MoreThanAYear => startDate > today.AddMonths(12),
+                _ => false,
+            };
+
+            if (matchesTimeline)
+            {
+                score += 1;
+                factors.Add(new MatchFactor($"Starts {startDate:MMM yyyy}, matching your preferred timeline", true));
+            }
+        }
+
+        // Region flexibility (added 2026-09-11, same session) — a third
+        // real gap: RegionFlexibility was collected but never compared
+        // against anything. Only the MajorCitiesOnly case has anything
+        // meaningful to check — OpenToAnyRegion/NotSureYet mean every
+        // location already fits that preference, so there's nothing a
+        // per-opportunity factor could usefully say (same reasoning
+        // StillExploring is skipped for StartTimeline above). Opportunity
+        // has no structured region/city-tier field, only a free-text
+        // Location, so this leans on a small curated city list
+        // (MajorGermanCities.cs) rather than guessing.
+        //
+        // Deliberately additive-only, same reasoning as StartTimeline above
+        // but doubly so here: MajorGermanCities is explicitly non-
+        // exhaustive, so a "miss" could just as easily be an undetected
+        // real major city as a genuine mismatch — penalizing on a signal
+        // this unreliable would tank real good matches over a curated
+        // list's own incompleteness, not the opportunity's actual fit.
+        if (profile.RegionFlexibility == RegionFlexibility.MajorCitiesOnly
+            && opportunity.Location is { } location
+            && MajorGermanCities.All.Any(city => location.Contains(city, StringComparison.OrdinalIgnoreCase)))
+        {
+            score += 1;
+            factors.Add(new MatchFactor($"Located in {location}, a major city — matches your location preference", true));
         }
 
         return (score, factors);

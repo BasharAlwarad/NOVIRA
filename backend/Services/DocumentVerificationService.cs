@@ -52,6 +52,8 @@ public class DocumentVerificationService
             Carefully examine the attached document and extract the requested fields. Be conservative and factual — only report what is actually visible and legible in the document itself; do not guess or infer beyond what's shown. This is a human-in-the-loop review: a person will read your output and make the final approve/deny decision, so surface concrete, specific concerns rather than making the final call yourself.
 
             Beyond the review fields, extract whatever identity/education/language details this specific document actually contains — if a human reviewer approves this document, these values are written onto the user's verified profile and used to find better-matched opportunities, so precision matters. Only fill in fields that are actually relevant to and visible on this particular document; leave everything else as an empty string. For dateOfBirth/expiryDate use ISO 8601 (YYYY-MM-DD). For certifiedLevel: if certifiedLanguage is "German", certifiedLevel must be one of A1/A2/B1/B2/C1/C1Plus (the CEFR scale); if certifiedLanguage is "English", certifiedLevel must be one of Beginner/Intermediate/Advanced/Fluent (the casual scale) — use whichever scale the certificate itself actually reports against.
+
+            For occupationField (only relevant for an education certificate/diploma): this is used as an exact-match hard filter for opportunity matching, so a wrong guess is worse than leaving it blank. Only fill it in if the certificate's field of study/degree title clearly and confidently corresponds to exactly one of the allowed category values below — if it's ambiguous, a general/unrelated qualification, or doesn't cleanly fit any single category, leave it as an empty string rather than picking the closest-sounding one.
             """;
 
         List<ContentBlockParam> content = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
@@ -109,6 +111,7 @@ public class DocumentVerificationService
             extraction.DocumentNumber,
             extraction.HighestEducationLevel,
             extraction.FieldOfStudy,
+            extraction.OccupationField,
             extraction.CertifiedLanguage,
             extraction.CertifiedLevel);
     }
@@ -200,6 +203,12 @@ public class DocumentVerificationService
                 type = "string",
                 description = "Only for an education certificate: the field/subject of study or degree title, else an empty string.",
             },
+            occupationField = new
+            {
+                type = "string",
+                @enum = OccupationFields.All.Append("").ToArray(),
+                description = "Only for an education certificate, and only when confident: which single category below the field of study/degree clearly corresponds to. Used as an exact-match hard filter for opportunity matching — leave as an empty string if ambiguous, unrelated, or not a confident fit, rather than picking the closest one. Empty string for any other document type.",
+            },
             certifiedLanguage = new
             {
                 type = "string",
@@ -218,7 +227,7 @@ public class DocumentVerificationService
             "documentTypeCategory", "documentTypeDetected", "extractedFullName", "issuerOrInstitution",
             "expiryDate", "legible", "nameMatchesProfile", "concerns", "summary",
             "dateOfBirth", "nationality", "documentNumber", "highestEducationLevel", "fieldOfStudy",
-            "certifiedLanguage", "certifiedLevel",
+            "occupationField", "certifiedLanguage", "certifiedLevel",
         }),
         ["additionalProperties"] = JsonSerializer.SerializeToElement(false),
     };
@@ -238,6 +247,7 @@ public class DocumentVerificationService
         [property: JsonPropertyName("documentNumber")] string DocumentNumber,
         [property: JsonPropertyName("highestEducationLevel")] string HighestEducationLevel,
         [property: JsonPropertyName("fieldOfStudy")] string FieldOfStudy,
+        [property: JsonPropertyName("occupationField")] string OccupationField,
         [property: JsonPropertyName("certifiedLanguage")] string CertifiedLanguage,
         [property: JsonPropertyName("certifiedLevel")] string CertifiedLevel);
 }
@@ -257,5 +267,6 @@ public record DocumentVerificationResult(
     string DocumentNumber,
     string HighestEducationLevel,
     string FieldOfStudy,
+    string OccupationField,
     string CertifiedLanguage,
     string CertifiedLevel);

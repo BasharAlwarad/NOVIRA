@@ -6,6 +6,11 @@ import { Suspense, useEffect, useState } from 'react';
 import { getCurrentUser, logout } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
 import type { MatchResult } from '@/lib/contracts/matches';
+import {
+  APPLICATION_HELP_PRICE_EUR,
+  buildApplicationHelpLink,
+  isApplicationHelpEnabled,
+} from '@/lib/application-help';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -20,6 +25,77 @@ const FIT_STYLES: Record<string, string> = {
   'Possible fit': 'bg-amber-50 text-amber-700',
   'Limited fit': 'bg-slate-100 text-slate-600',
 };
+
+// The paid "Get help applying" offer (built 2026-09-12) — see
+// Monetization-Strategy.md §4/§4.4. Deliberately collapsed behind a plain-
+// text toggle rather than a modal (no modal component exists elsewhere in
+// this codebase; an inline expand/collapse matches the existing pattern
+// used for e.g. the document-correction banner on /account). Free match
+// info (title/provider/location/fit) is never touched by this — the offer
+// is for hands-on help with a specific application, not access to the
+// match itself. The "apply directly, this is optional" line right in the
+// expanded copy is deliberate, not boilerplate: hiding that a free path
+// exists would be exactly the kind of dark pattern Plan.md §5's
+// "radical transparency" positioning exists to rule out.
+function ApplicationHelpOffer({ match }: { match: MatchResult }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!isApplicationHelpEnabled()) {
+    return null;
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="mt-4 border-t border-slate-100 pt-4 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+      >
+        Get help applying to this →
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl bg-emerald-50/60 p-4">
+      <p className="text-sm font-semibold text-emerald-900">
+        What&apos;s included (€{APPLICATION_HELP_PRICE_EUR}, one-time)
+      </p>
+      <ul className="mt-2 space-y-1 text-sm text-emerald-800">
+        <li>• We check your documents against this program&apos;s specific requirements</li>
+        <li>• We review what you&apos;re about to submit, before you submit it</li>
+        <li>• Feedback on your CV or motivation letter, if you have one</li>
+      </ul>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <a
+          href={buildApplicationHelpLink(match.opportunityId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+        >
+          Continue — €{APPLICATION_HELP_PRICE_EUR}
+        </a>
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="text-sm text-slate-500 hover:text-slate-700"
+        >
+          Not now
+        </button>
+      </div>
+      {/* A single interpolated string, not mixed JSX text nodes split
+          across lines — the latter hits a real JSX whitespace-collapsing
+          gotcha where React trims the leading space off a text segment
+          that starts a new physical line right after an expression,
+          silently swallowing the space between {match.provider} and the
+          word that follows (found live during verification: rendered as
+          "GmbHon" instead of "GmbH on"). */}
+      <p className="mt-2 text-xs text-slate-500">
+        {`You can also apply directly with ${match.provider} on your own — this is optional, hands-on help if you'd like a second pair of eyes.`}
+      </p>
+    </div>
+  );
+}
 
 function MatchCard({ match }: { match: MatchResult }) {
   return (
@@ -57,6 +133,8 @@ function MatchCard({ match }: { match: MatchResult }) {
           ))}
         </ul>
       )}
+
+      <ApplicationHelpOffer match={match} />
     </div>
   );
 }

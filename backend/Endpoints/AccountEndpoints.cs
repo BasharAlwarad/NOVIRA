@@ -40,6 +40,8 @@ public record AccountResponse(
     string? VerifiedFieldOfStudy,
     LanguageLevel? VerifiedGermanLevel,
     LanguageLevel? VerifiedEnglishLevel,
+    string? VerifiedOccupationField,
+    bool VerifiedHasCertifiedLanguageProof,
     DateTime? VerifiedDataUpdatedAt);
 
 // The self-service counterpart to DocumentsAdminEndpoints — a signed-in
@@ -64,7 +66,8 @@ public static class AccountEndpoints
                 user.VerifiedFullName, user.VerifiedDateOfBirth, user.VerifiedNationality,
                 user.VerifiedPassportNumber, user.VerifiedPassportExpiryDate, user.VerifiedPassportStatus,
                 user.VerifiedHighestEducation, user.VerifiedFieldOfStudy,
-                user.VerifiedGermanLevel, user.VerifiedEnglishLevel, user.VerifiedDataUpdatedAt));
+                user.VerifiedGermanLevel, user.VerifiedEnglishLevel,
+                user.VerifiedOccupationField, user.VerifiedHasCertifiedLanguageProof, user.VerifiedDataUpdatedAt));
         });
 
         // Closes a real gap found live 2026-08-30: every other profile-

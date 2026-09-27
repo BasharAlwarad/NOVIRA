@@ -91,6 +91,14 @@ export interface VerifiedProfile {
   verifiedFieldOfStudy: string | null;
   verifiedGermanLevel: OpportunityLanguageLevel | null;
   verifiedEnglishLevel: OpportunityLanguageLevel | null;
+  // Added 2026-09-11 — closes the gap where OccupationField (the primary
+  // matching hard filter) had no Verified* counterpart at all. Plain
+  // string, same convention as the self-reported occupationField field.
+  verifiedOccupationField: string | null;
+  // Whether an Approved LanguageCertificate document exists — additive
+  // with the self-reported languageCertificate answer in matching, not a
+  // replacement (see backend/Services/MatchingService.cs).
+  verifiedHasCertifiedLanguageProof: boolean;
   verifiedDataUpdatedAt: string | null;
 }
 

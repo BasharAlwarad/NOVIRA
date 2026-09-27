@@ -41,6 +41,7 @@ public record AdminDocumentResponse(
     string? AiDocumentNumber,
     string? AiHighestEducationLevel,
     string? AiFieldOfStudy,
+    string? AiOccupationField,
     string? AiCertifiedLanguage,
     string? AiCertifiedLevel,
     List<string> AiFlags,
@@ -95,6 +96,8 @@ public record AdminUserDetailResponse(
     string? VerifiedFieldOfStudy,
     LanguageLevel? VerifiedGermanLevel,
     LanguageLevel? VerifiedEnglishLevel,
+    string? VerifiedOccupationField,
+    bool VerifiedHasCertifiedLanguageProof,
     DateTime? VerifiedDataUpdatedAt,
     List<AdminDocumentResponse> Documents,
     // Every message ever sent to this user, newest first — free-text sends
@@ -356,7 +359,8 @@ public static class DocumentsAdminEndpoints
             user.VerifiedFullName, user.VerifiedDateOfBirth, user.VerifiedNationality,
             user.VerifiedPassportNumber, user.VerifiedPassportExpiryDate, user.VerifiedPassportStatus,
             user.VerifiedHighestEducation, user.VerifiedFieldOfStudy,
-            user.VerifiedGermanLevel, user.VerifiedEnglishLevel, user.VerifiedDataUpdatedAt,
+            user.VerifiedGermanLevel, user.VerifiedEnglishLevel,
+            user.VerifiedOccupationField, user.VerifiedHasCertifiedLanguageProof, user.VerifiedDataUpdatedAt,
             documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
             messages.Select(m => new MessageResponse(m.Id, m.Subject, m.Body, m.CreatedAt, m.ReadAt)).ToList());
 
@@ -400,6 +404,7 @@ public static class DocumentsAdminEndpoints
             extracted?.DocumentTypeDetected, extracted?.IssuerOrInstitution, extracted?.ExpiryDate, extracted?.Legible,
             NullIfEmpty(extracted?.DateOfBirth), NullIfEmpty(extracted?.Nationality), NullIfEmpty(extracted?.DocumentNumber),
             NullIfEmpty(extracted?.HighestEducationLevel), NullIfEmpty(extracted?.FieldOfStudy),
+            NullIfEmpty(extracted?.OccupationField),
             NullIfEmpty(extracted?.CertifiedLanguage), NullIfEmpty(extracted?.CertifiedLevel),
             flags, d.AiSummary, d.AiVerifiedAt,
             d.ReviewStatus, d.ReviewedAt, d.ReviewNote, d.RejectionMessageSent,
@@ -432,6 +437,8 @@ public static class DocumentsAdminEndpoints
         user.VerifiedFieldOfStudy = null;
         user.VerifiedGermanLevel = null;
         user.VerifiedEnglishLevel = null;
+        user.VerifiedOccupationField = null;
+        user.VerifiedHasCertifiedLanguageProof = false;
         user.VerifiedDataUpdatedAt = null;
 
         var approvedDocuments = allDocuments
@@ -530,19 +537,48 @@ public static class DocumentsAdminEndpoints
                     user.VerifiedFieldOfStudy = extracted.FieldOfStudy;
                     wroteAnything = true;
                 }
-            }
-            else if (document.DocumentType == DocumentType.LanguageCertificate
-                && Enum.TryParse<LanguageLevel>(extracted.CertifiedLevel, out var certifiedLevel))
-            {
-                if (extracted.CertifiedLanguage == "German")
+
+                // OccupationField is an exact-match hard filter in
+                // MatchingService, so defense in depth here matters as much
+                // as it does for SourceUrl trust elsewhere in this app:
+                // even though the extraction schema already constrains the
+                // AI to OccupationFields.All via `enum`, re-validate against
+                // the same canonical set server-side before ever promoting
+                // it onto the account — never trust a single layer for a
+                // hard filter. A value that somehow isn't a real key is
+                // dropped, not guessed at or coerced (added 2026-09-11, see
+                // User.VerifiedOccupationField's own comment for why this
+                // field exists at all).
+                if (!string.IsNullOrWhiteSpace(extracted.OccupationField)
+                    && OccupationFields.Valid.Contains(extracted.OccupationField))
                 {
-                    user.VerifiedGermanLevel = certifiedLevel;
+                    user.VerifiedOccupationField = extracted.OccupationField;
                     wroteAnything = true;
                 }
-                else if (extracted.CertifiedLanguage == "English")
+            }
+            else if (document.DocumentType == DocumentType.LanguageCertificate)
+            {
+                // The document type itself (already human-approved) is the
+                // actual proof of "holds a certified language exam result"
+                // — MatchingService's soft-factor bonus (added 2026-09-11)
+                // just needs to know one exists, independent of whether the
+                // specific level below parsed cleanly. Never reset to false
+                // here — only RecomputeVerifiedData's initial wipe does
+                // that, so this stays correctly cumulative across multiple
+                // approved certificates (e.g. one German, one English).
+                user.VerifiedHasCertifiedLanguageProof = true;
+                wroteAnything = true;
+
+                if (Enum.TryParse<LanguageLevel>(extracted.CertifiedLevel, out var certifiedLevel))
                 {
-                    user.VerifiedEnglishLevel = certifiedLevel;
-                    wroteAnything = true;
+                    if (extracted.CertifiedLanguage == "German")
+                    {
+                        user.VerifiedGermanLevel = certifiedLevel;
+                    }
+                    else if (extracted.CertifiedLanguage == "English")
+                    {
+                        user.VerifiedEnglishLevel = certifiedLevel;
+                    }
                 }
             }
         }
@@ -557,7 +593,8 @@ public static class DocumentsAdminEndpoints
     private record AiExtractedData(
         string DocumentTypeDetected, string IssuerOrInstitution, string ExpiryDate, bool Legible,
         string DateOfBirth, string Nationality, string DocumentNumber,
-        string HighestEducationLevel, string FieldOfStudy, string CertifiedLanguage, string CertifiedLevel);
+        string HighestEducationLevel, string FieldOfStudy, string OccupationField,
+        string CertifiedLanguage, string CertifiedLevel);
 
     // Plain-text now (in-app message body, not an HTML email) — replaces
     // the old BuildDecisionEmailHtml, removed 2026-08-27 when this content

@@ -37,6 +37,7 @@ export interface AdminDocument {
   aiDocumentNumber: string | null;
   aiHighestEducationLevel: string | null;
   aiFieldOfStudy: string | null;
+  aiOccupationField: string | null;
   aiCertifiedLanguage: string | null;
   aiCertifiedLevel: string | null;
   aiFlags: string[];

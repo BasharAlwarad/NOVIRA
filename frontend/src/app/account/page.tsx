@@ -125,8 +125,12 @@ function VerifiedSection({ account }: { account: Account }) {
     ['Passport expiry', account.verifiedPassportExpiryDate],
     ['Highest education', account.verifiedHighestEducation],
     ['Field of study', account.verifiedFieldOfStudy],
+    ['Occupation field', account.verifiedOccupationField],
     ['German level', account.verifiedGermanLevel],
     ['English level', account.verifiedEnglishLevel],
+    // A boolean, not a value to display as-is — only shown once true (a
+    // false/absent certificate isn't "verified data," just nothing yet).
+    ['Certified language proof', account.verifiedHasCertifiedLanguageProof ? 'Yes' : null],
   ];
   const fields = allFields.filter(([, value]) => value !== null);
 
