@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<UserDocument> UserDocuments => Set<UserDocument>();
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<Purchase> Purchases => Set<Purchase>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +50,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.HasIndex(m => m.UserId);
             entity.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Purchase>(entity =>
+        {
+            entity.HasIndex(p => p.UserId);
+            entity.HasIndex(p => p.StripeSessionId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

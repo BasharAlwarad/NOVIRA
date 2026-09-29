@@ -39,6 +39,11 @@ function UserRow({ user }: { user: AdminUserListItem }) {
               Flagged
             </span>
           )}
+          {user.effectiveTier !== 'Free' && (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              {user.effectiveTier}
+            </span>
+          )}
           {user.pendingDocumentCount > 0 && (
             <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
               {user.pendingDocumentCount} document{user.pendingDocumentCount === 1 ? '' : 's'} pending review

@@ -1,4 +1,4 @@
-import type { MatchResult } from '@/lib/contracts/matches';
+import type { MatchesResponse } from '@/lib/contracts/matches';
 
 export class NotSignedInError extends Error {
   constructor() {
@@ -7,7 +7,7 @@ export class NotSignedInError extends Error {
   }
 }
 
-export async function fetchMyMatches(): Promise<MatchResult[]> {
+export async function fetchMyMatches(): Promise<MatchesResponse> {
   const response = await fetch('/api/matches');
 
   if (response.status === 401) {
@@ -18,5 +18,5 @@ export async function fetchMyMatches(): Promise<MatchResult[]> {
     throw new Error('Failed to load your matches.');
   }
 
-  return (await response.json()) as MatchResult[];
+  return (await response.json()) as MatchesResponse;
 }

@@ -1,6 +1,7 @@
 import type { ProfileSnapshot, VerifiedProfile } from '@/lib/contracts/leads';
 import type { DocumentType, AiVerificationStatus, DocumentReviewStatus } from '@/lib/contracts/documents';
 import type { Message } from '@/lib/contracts/messages';
+import type { EffectiveTier } from '@/lib/contracts/account';
 
 // Mirrors backend/Endpoints/DocumentsAdminEndpoints.cs's response records.
 
@@ -15,6 +16,18 @@ export interface AdminUserListItem {
   fraudFlagged: boolean;
   pendingDocumentCount: number;
   createdAt: string;
+  effectiveTier: EffectiveTier;
+}
+
+// Mirrors backend/Endpoints/DocumentsAdminEndpoints.cs's AdminPurchaseResponse —
+// the real payment ledger for one user, admin-visible.
+export interface AdminPurchase {
+  id: string;
+  tier: string;
+  amountEur: number;
+  status: 'Paid' | 'Refunded';
+  createdAt: string;
+  refundedAt: string | null;
 }
 
 export interface AdminDocument {
@@ -69,6 +82,8 @@ export interface AdminUserDetail extends ProfileSnapshot, VerifiedProfile {
   fraudFlaggedAt: string | null;
   fraudFlagNote: string | null;
   profileUpdatedAt: string | null;
+  effectiveTier: EffectiveTier;
+  purchases: AdminPurchase[];
   documents: AdminDocument[];
   // Every message ever sent to this user, newest first — free-text sends
   // and the automatic Deny/FlagRed notices both land here (see the backend

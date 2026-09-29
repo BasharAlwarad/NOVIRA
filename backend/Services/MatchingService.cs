@@ -11,7 +11,20 @@ public record MatchResult(
     string? Location,
     OpportunityPath Path,
     string FitLabel,
-    List<MatchFactor> Factors);
+    List<MatchFactor> Factors,
+    // Real Opportunity fields that already existed but weren't exposed here
+    // — added 2026-09-29 so the one free (unblurred) match on /matches can
+    // show enough concrete detail to actually be worth unlocking the rest
+    // for, not just a title/provider/fit label. No new data, no incremental
+    // leak risk: this one match is already fully de-anonymized by its
+    // title+provider, so surfacing its other already-real fields doesn't
+    // change what a Free-tier user could already piece together.
+    string? Description,
+    string? SourceUrl,
+    int? MonthlyCompensationEur,
+    int? TuitionFeeEur,
+    DateOnly? StartDate,
+    DateOnly? ApplicationDeadline);
 
 /// <summary>
 /// Rule-based matching against real, verified (Approved-only) Opportunity
@@ -58,8 +71,37 @@ public static class MatchingService
                 r.Opportunity.Location,
                 r.Opportunity.Path,
                 BucketLabel(r.Score),
-                r.Factors))
+                r.Factors,
+                r.Opportunity.Description,
+                ResolveSourceUrl(r.Opportunity),
+                r.Opportunity.MonthlyCompensationEur,
+                r.Opportunity.TuitionFeeEur,
+                r.Opportunity.StartDate,
+                r.Opportunity.ApplicationDeadline))
             .ToList();
+    }
+
+    // Bundesagentur's search API doesn't reliably populate externeURL —
+    // confirmed live 2026-09-29 against real data: 0 of 54 synced Approved
+    // Ausbildung rows had a SourceUrl, despite OpportunitySyncService
+    // correctly mapping it when the API does provide one. Rather than leave
+    // every synced listing without a link, fall back to Bundesagentur's own
+    // public job-detail page, which resolves from the SourceRef
+    // (referenznummer) every synced row already has — a real, confirmed URL
+    // pattern (github.com/bundesAPI/jobsuche-api), not a guess.
+    private static string? ResolveSourceUrl(Opportunity opportunity)
+    {
+        if (!string.IsNullOrWhiteSpace(opportunity.SourceUrl))
+        {
+            return opportunity.SourceUrl;
+        }
+
+        if (opportunity.Source == OpportunitySource.Bundesagentur && !string.IsNullOrWhiteSpace(opportunity.SourceRef))
+        {
+            return $"https://www.arbeitsagentur.de/jobsuche/jobdetail/{Uri.EscapeDataString(opportunity.SourceRef)}";
+        }
+
+        return null;
     }
 
     private static bool PassesHardFilters(User profile, Opportunity opportunity)

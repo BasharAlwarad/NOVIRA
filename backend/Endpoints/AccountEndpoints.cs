@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
 using Novira.Backend.Models;
 using Novira.Backend.Services;
@@ -42,7 +43,11 @@ public record AccountResponse(
     LanguageLevel? VerifiedEnglishLevel,
     string? VerifiedOccupationField,
     bool VerifiedHasCertifiedLanguageProof,
-    DateTime? VerifiedDataUpdatedAt);
+    DateTime? VerifiedDataUpdatedAt,
+    // What this user can currently unlock — see EffectiveTierCalculator.
+    // Surfaced here (not a separate endpoint) since "my account" is where
+    // tier/unlock status was asked to live.
+    string EffectiveTier);
 
 // The self-service counterpart to DocumentsAdminEndpoints — a signed-in
 // user's own view of their account, plus account deletion. Session-
@@ -53,9 +58,12 @@ public static class AccountEndpoints
     {
         var group = app.MapGroup("/account").AddEndpointFilter<SessionAuthFilter>();
 
-        group.MapGet("/", (HttpContext httpContext) =>
+        group.MapGet("/", async (HttpContext httpContext, AppDbContext db) =>
         {
             var user = (User)httpContext.Items["CurrentUser"]!;
+            var purchases = await db.Purchases.Where(p => p.UserId == user.Id).ToListAsync();
+            var effectiveTier = EffectiveTierCalculator.Compute(purchases);
+
             return Results.Ok(new AccountResponse(
                 user.Id, user.Email, user.FullName, user.CreatedAt,
                 user.Country, user.Age, user.HighestEducation, user.OccupationField,
@@ -67,7 +75,8 @@ public static class AccountEndpoints
                 user.VerifiedPassportNumber, user.VerifiedPassportExpiryDate, user.VerifiedPassportStatus,
                 user.VerifiedHighestEducation, user.VerifiedFieldOfStudy,
                 user.VerifiedGermanLevel, user.VerifiedEnglishLevel,
-                user.VerifiedOccupationField, user.VerifiedHasCertifiedLanguageProof, user.VerifiedDataUpdatedAt));
+                user.VerifiedOccupationField, user.VerifiedHasCertifiedLanguageProof, user.VerifiedDataUpdatedAt,
+                effectiveTier.ToString()));
         });
 
         // Closes a real gap found live 2026-08-30: every other profile-

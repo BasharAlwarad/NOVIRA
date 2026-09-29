@@ -17,6 +17,26 @@ Before saying a fix or feature works, confirm it against the actual live dev ser
 
 "The code looks right," a passing type-check, or reasoning through the logic in your head are not verification — they're the reason you have a hypothesis worth testing, not the test itself. Use a real `curl` call for an API change, or a real Playwright session for a UI change. If a paid step is involved (see §4), use real judgment about what specifically needs the real call versus what can be tested downstream of it.
 
+**Never start or stop the backend on port 5080 yourself** — found live 2026-09-29: the founder runs their own backend in their own terminal and leaves it running across a whole working session, and starting/stopping an instance there on their behalf either silently kills theirs or leaves port 5080 down when they next expect it up, forcing them to notice and restart it by hand every time. Port 5080 is the founder's; treat whatever is bound there as off-limits regardless of whether you recognize it as "yours."
+
+For backend-only verification (a `curl` check against an endpoint), run your own throwaway instance on a separate port instead, against the same database — this is safe, since verification only ever adds/removes real rows through real endpoints and cleans them up (§3). **`dotnet run --urls http://localhost:5090` does NOT work for this** — it still builds to the default `bin/Debug/net9.0` output first, colliding with the founder's locked binary exactly like a plain `dotnet build` does. Use the two-step form instead (confirmed working live 2026-09-29):
+```
+dotnet build -o bin/verify-build
+ASPNETCORE_ENVIRONMENT=Development dotnet bin/verify-build/Novira.Backend.dll --urls http://localhost:5090
+```
+The `ASPNETCORE_ENVIRONMENT=Development` is required — running the built DLL directly (unlike `dotnet run`) skips `Properties/launchSettings.json`, which is what normally sets it, and without it user-secrets (Admin key, Stripe key, etc.) silently fail to load. Track the exact PID this reports (e.g. via `Get-NetTCPConnection -LocalPort 5090`) and only ever stop that PID — never "whatever process is holding a port." Delete `bin/verify-build` when done, same disposability discipline as §2.
+
+For a Playwright check that only needs the founder's already-current frontend+backend, don't spin up your own — the frontend's `API_BASE_URL` (`frontend/.env.local`) is fixed to `http://localhost:5080`, so a Playwright session against `localhost:3000` always exercises whatever is already running there. Ask the founder to confirm their backend is up first, rather than starting one yourself on their port.
+
+**When the feature under test needs backend code the founder hasn't restarted into yet**, a fully isolated frontend+backend pair works (confirmed live 2026-09-29) — but `next dev` refuses a second instance outright (`Another next dev server is already running`, a project-directory-keyed lock, not port-keyed, so `-p 3001` doesn't help). Use a **production** server on the second port instead, which has no such lock:
+```
+npm run build   # only if there are frontend changes since the last build
+API_BASE_URL=http://localhost:5090 npm run start -- -p 3001
+```
+paired with your own isolated backend on 5090 (see above). This gives a fully separate stack end to end — never touches the founder's port 3000 or 5080 — for exercising a real signed-in session (magic link + cookie) through actual rendered UI.
+
+**`dotnet build` also collides with the founder's running instance** — found live 2026-09-29: their running `Novira.Backend.exe` holds a file lock on `bin/Debug/net9.0/Novira.Backend.exe`, so a plain `dotnet build` while they're running fails with `MSB3027`/`MSB3021` ("file is locked by..."). This isn't the file-lock-from-a-stale-process case this skill used to just `Stop-Process` through — that PID is now off-limits. Build to a separate output folder instead, which sidesteps the lock entirely: `dotnet build -o bin/verify-build`. Delete that folder when done, same disposability discipline as §2's verify scripts.
+
 ## 2. Throwaway scripts: `frontend/verify/`, then gone
 
 Ad-hoc verification scripts (Playwright sessions, one-off API sequences) go in `frontend/verify/` (gitignored). Run with `node verify/whatever.mjs`, or `npx tsx` for a script that imports TypeScript source directly (e.g. to sanity-check a `lib/` function against sample data without going through the UI).

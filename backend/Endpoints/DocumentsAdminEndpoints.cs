@@ -19,7 +19,20 @@ public record AdminUserListItem(
     string? VerifiedFullName,
     bool FraudFlagged,
     int PendingDocumentCount,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    // What this user can currently unlock — see EffectiveTierCalculator.
+    // Added 2026-09-29: a paid user was otherwise invisible anywhere on the
+    // admin side, with no way to tell Free and paying users apart at a
+    // glance.
+    string EffectiveTier);
+
+public record AdminPurchaseResponse(
+    Guid Id,
+    string Tier,
+    int AmountEur,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? RefundedAt);
 
 public record AdminDocumentResponse(
     Guid Id,
@@ -99,6 +112,12 @@ public record AdminUserDetailResponse(
     string? VerifiedOccupationField,
     bool VerifiedHasCertifiedLanguageProof,
     DateTime? VerifiedDataUpdatedAt,
+    // What this user can currently unlock, plus the real purchase ledger it
+    // was derived from (newest first) — see EffectiveTierCalculator. Added
+    // 2026-09-29: a completed Tier 1 payment had no visibility anywhere on
+    // this page.
+    string EffectiveTier,
+    List<AdminPurchaseResponse> Purchases,
     List<AdminDocumentResponse> Documents,
     // Every message ever sent to this user, newest first — free-text sends
     // and the automatic Deny/FlagRed notices (see the PATCH handler below)
@@ -145,10 +164,17 @@ public static class DocumentsAdminEndpoints
                 .Select(g => new { UserId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.UserId, x => x.Count);
 
+            var purchasesByUser = (await db.Purchases
+                .Where(p => userIds.Contains(p.UserId))
+                .ToListAsync())
+                .GroupBy(p => p.UserId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             var items = users
                 .Select(u => new AdminUserListItem(
                     u.Id, u.Email, u.FullName, u.VerifiedFullName, u.FraudFlagged,
-                    pendingCounts.GetValueOrDefault(u.Id, 0), u.CreatedAt))
+                    pendingCounts.GetValueOrDefault(u.Id, 0), u.CreatedAt,
+                    EffectiveTierCalculator.Compute(purchasesByUser.GetValueOrDefault(u.Id, [])).ToString()))
                 .OrderByDescending(u => u.PendingDocumentCount > 0)
                 .ThenByDescending(u => u.PendingDocumentCount)
                 .ThenByDescending(u => u.CreatedAt)
@@ -170,8 +196,9 @@ public static class DocumentsAdminEndpoints
                 .OrderByDescending(d => d.UploadedAt)
                 .ToListAsync();
             var messages = await LoadMessagesAsync(db, id);
+            var purchases = await LoadPurchasesAsync(db, id);
 
-            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, storage));
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage));
         });
 
         group.MapPatch("/{userId:guid}/documents/{documentId:guid}", async (
@@ -277,8 +304,9 @@ public static class DocumentsAdminEndpoints
                 .OrderByDescending(d => d.UploadedAt)
                 .ToListAsync();
             var messages = await LoadMessagesAsync(db, id);
+            var purchases = await LoadPurchasesAsync(db, id);
 
-            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, storage));
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage));
         });
 
         // Admin-initiated full account deletion — the same real, complete
@@ -347,7 +375,7 @@ public static class DocumentsAdminEndpoints
     }
 
     private static AdminUserDetailResponse ToAdminUserDetailResponse(
-        User user, List<UserDocument> documents, List<Message> messages, AzureBlobStorageService storage) =>
+        User user, List<UserDocument> documents, List<Message> messages, List<Purchase> purchases, AzureBlobStorageService storage) =>
         new(
             user.Id, user.Email, user.FullName, user.CreatedAt,
             user.FraudFlagged, user.FraudFlaggedAt, user.FraudFlagNote,
@@ -361,11 +389,17 @@ public static class DocumentsAdminEndpoints
             user.VerifiedHighestEducation, user.VerifiedFieldOfStudy,
             user.VerifiedGermanLevel, user.VerifiedEnglishLevel,
             user.VerifiedOccupationField, user.VerifiedHasCertifiedLanguageProof, user.VerifiedDataUpdatedAt,
+            EffectiveTierCalculator.Compute(purchases).ToString(),
+            purchases.Select(p => new AdminPurchaseResponse(
+                p.Id, p.Tier.ToString(), p.AmountEur, p.Status.ToString(), p.CreatedAt, p.RefundedAt)).ToList(),
             documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
             messages.Select(m => new MessageResponse(m.Id, m.Subject, m.Body, m.CreatedAt, m.ReadAt)).ToList());
 
     private static Task<List<Message>> LoadMessagesAsync(AppDbContext db, Guid userId) =>
         db.Messages.Where(m => m.UserId == userId).OrderByDescending(m => m.CreatedAt).ToListAsync();
+
+    private static Task<List<Purchase>> LoadPurchasesAsync(AppDbContext db, Guid userId) =>
+        db.Purchases.Where(p => p.UserId == userId).OrderByDescending(p => p.CreatedAt).ToListAsync();
 
     // allDocuments, when provided, resolves SupersedesDocumentName from the
     // same set already being built (list/detail views) — no extra query.

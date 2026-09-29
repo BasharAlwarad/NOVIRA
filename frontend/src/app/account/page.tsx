@@ -7,9 +7,11 @@ import { deleteMyAccount, fetchMyAccount, NotSignedInError as NoAccountSession }
 import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
 import { listMyMessages, markAllMessagesRead } from '@/lib/api/messages';
-import type { Account } from '@/lib/contracts/account';
+import { verifyCheckoutSession } from '@/lib/api/purchases';
+import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
 import type { Message } from '@/lib/contracts/messages';
+import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 import { usePolling } from '@/hooks/usePolling';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
@@ -356,6 +358,44 @@ function MessagesSection({ messages }: { messages: Message[] | null }) {
   );
 }
 
+const TIER_LABELS: Record<EffectiveTier, string> = {
+  Free: 'Free',
+  Tier1: 'Tier 1 — Unlock all matches',
+  Tier2: 'Tier 2 — Application support',
+  Tier3: 'Tier 3 — Full service',
+};
+
+// "Where the user unlocks... shows what tier or level he is on and what can
+// he unlock" — the founder's own framing for where this belongs. Only
+// offers the Tier 1 upsell today since Tier 2/3 don't have a checkout flow
+// yet (Monetization-Strategy.md §4.1's phased build order).
+function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5">
+      <h2 className="text-sm font-semibold text-slate-900">Your plan</h2>
+      <p className="mt-1 text-sm font-medium text-slate-700">{TIER_LABELS[effectiveTier]}</p>
+
+      {effectiveTier === 'Free' && isTier1PurchaseEnabled() && (
+        <div className="mt-4 rounded-2xl bg-emerald-50/60 p-4">
+          <p className="text-sm font-semibold text-emerald-900">
+            Unlock all your matches — €{TIER1_PRICE_EUR}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-emerald-800">
+            See every matching opportunity (not just one), plus a quick human review of your
+            profile.
+          </p>
+          <a
+            href={getTier1PaymentLink()}
+            className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          >
+            Unlock — €{TIER1_PRICE_EUR}
+          </a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DangerZone({ onDeleted }: { onDeleted: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -427,6 +467,9 @@ export default function AccountPage() {
   const [documents, setDocuments] = useState<UserDocumentSummary[] | null>(null);
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [justUpdated, setJustUpdated] = useState(false);
+  const [checkoutMessage, setCheckoutMessage] = useState<{ text: string; isError: boolean } | null>(
+    null
+  );
 
   const loadDocuments = useCallback(() => {
     listMyDocuments()
@@ -480,6 +523,43 @@ export default function AccountPage() {
     }
   }, [router]);
 
+  // Lands here from the Tier 1 Stripe Payment Link's "after payment"
+  // redirect (configured in the Stripe dashboard, not in this app) —
+  // ?checkout_session={CHECKOUT_SESSION_ID}. Verified server-side before any
+  // access is granted (see PurchasesEndpoints.cs's comment on why this
+  // exists instead of a webhook). Hardcoded to Tier1 for now since that's
+  // the only tier with a real checkout flow yet — once Tier 2/3 Payment
+  // Links exist, this needs the tier encoded in the redirect URL too rather
+  // than assumed.
+  useEffect(() => {
+    const sessionId = new URLSearchParams(window.location.search).get('checkout_session');
+    if (!sessionId) return;
+
+    router.replace('/account');
+
+    verifyCheckoutSession({ tier: 'Tier1', sessionId })
+      .then((result) => {
+        setCheckoutMessage({
+          text: result.alreadyProcessed
+            ? 'Payment already confirmed — your matches are unlocked.'
+            : 'Payment confirmed — your matches are unlocked.',
+          isError: false,
+        });
+        return fetchMyAccount();
+      })
+      .then((account) => {
+        if (account) {
+          setState({ status: 'loaded', account });
+        }
+      })
+      .catch((err) => {
+        setCheckoutMessage({
+          text: err instanceof Error ? err.message : 'Could not verify your payment.',
+          isError: true,
+        });
+      });
+  }, [router]);
+
   // A new message won't otherwise appear until the page is manually
   // reloaded — this is what actually fixes that, without the complexity of
   // a real push mechanism (WebSockets/SSE) for what's just asynchronous
@@ -529,6 +609,18 @@ export default function AccountPage() {
           </p>
         )}
 
+        {checkoutMessage && (
+          <p
+            className={`mt-4 rounded-2xl px-4 py-2.5 text-sm font-medium ${
+              checkoutMessage.isError
+                ? 'bg-red-50 text-red-800'
+                : 'bg-emerald-50 text-emerald-800'
+            }`}
+          >
+            {checkoutMessage.text}
+          </p>
+        )}
+
         <div className="mt-8 space-y-6">
           {state.status === 'loading' && <p className="text-sm text-slate-500">Loading…</p>}
 
@@ -555,6 +647,7 @@ export default function AccountPage() {
           {state.status === 'loaded' && (
             <>
               {!state.account.profileUpdatedAt && <NoProfileBanner />}
+              <PlanSection effectiveTier={state.account.effectiveTier} />
               <ProfileSection account={state.account} />
               <VerifiedSection account={state.account} />
               <DocumentsSection documents={documents} onUploaded={loadDocuments} />

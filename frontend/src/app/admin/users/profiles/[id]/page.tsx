@@ -11,7 +11,7 @@ import {
   reviewDocument,
   sendMessageToUser,
 } from '@/lib/api/admin-users';
-import type { AdminDocument, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
+import type { AdminDocument, AdminPurchase, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
 import type { Message } from '@/lib/contracts/messages';
 import { useAdminKey } from '@/hooks/useAdminKey';
 
@@ -582,6 +582,72 @@ function DataConsistencySection({ user }: { user: AdminUserDetail }) {
   );
 }
 
+const TIER_LABELS: Record<string, string> = {
+  Free: 'Free',
+  Tier1: 'Tier 1 — Unlock all matches',
+  Tier2: 'Tier 2 — Application support',
+  Tier3: 'Tier 3 — Full service',
+};
+
+// Was previously invisible anywhere on the admin side — a completed Tier 1
+// payment gave no indication here at all (found live 2026-09-29). Always
+// rendered, even with zero purchases, so "Free, nothing paid" is a visible
+// fact rather than an absent section.
+function PurchasesSection({
+  effectiveTier,
+  purchases,
+}: {
+  effectiveTier: string;
+  purchases: AdminPurchase[];
+}) {
+  return (
+    <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-slate-900">Plan &amp; payments</h2>
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            effectiveTier === 'Free' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'
+          }`}
+        >
+          {TIER_LABELS[effectiveTier] ?? effectiveTier}
+        </span>
+      </div>
+
+      {purchases.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500">No purchases yet.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {purchases.map((purchase) => (
+            <div
+              key={purchase.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 p-3"
+            >
+              <div className="text-xs text-slate-700">
+                <p className="font-semibold text-slate-900">
+                  {TIER_LABELS[purchase.tier] ?? purchase.tier} — €{purchase.amountEur}
+                </p>
+                <p className="mt-0.5">
+                  {formatDateTime(purchase.createdAt)}
+                  {purchase.refundedAt ? ` · Refunded ${formatDateTime(purchase.refundedAt)}` : ''}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  purchase.status === 'Refunded'
+                    ? 'bg-slate-100 text-slate-600'
+                    : 'bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {purchase.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function AdminUserProfilePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -697,6 +763,11 @@ export default function AdminUserProfilePage() {
                 Fraud-flagged{user.fraudFlagNote ? ` — ${user.fraudFlagNote}` : ''}
               </span>
             )}
+            {user.effectiveTier !== 'Free' && (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {TIER_LABELS[user.effectiveTier] ?? user.effectiveTier}
+              </span>
+            )}
             <button
               type="button"
               onClick={handleRecompute}
@@ -797,6 +868,8 @@ export default function AdminUserProfilePage() {
             </section>
           );
         })()}
+
+        <PurchasesSection effectiveTier={user.effectiveTier} purchases={user.purchases} />
 
         <DataConsistencySection user={user} />
 

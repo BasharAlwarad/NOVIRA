@@ -46,6 +46,7 @@ builder.Services.AddScoped<SessionAuthFilter>();
 builder.Services.AddScoped<AzureBlobStorageService>();
 builder.Services.AddScoped<DocumentVerificationService>();
 builder.Services.AddScoped<ResendEmailService>();
+builder.Services.AddScoped<StripeCheckoutClient>();
 
 // Coarse per-IP ceiling on /leads. Note this only ever sees the Next.js
 // server's IP for browser traffic (the frontend proxies the request
@@ -148,6 +149,7 @@ app.MapDocumentsEndpoints();
 app.MapDocumentsAdminEndpoints();
 app.MapAccountEndpoints();
 app.MapMessagesEndpoints();
+app.MapPurchasesEndpoints();
 
 app.MapPost("/leads", async (
     SaveResultRequest request,

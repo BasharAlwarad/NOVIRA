@@ -1,16 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { getCurrentUser, logout } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
-import type { MatchResult } from '@/lib/contracts/matches';
+import type { MatchResult, StateCount } from '@/lib/contracts/matches';
+import type { EffectiveTier } from '@/lib/contracts/account';
 import {
   APPLICATION_HELP_PRICE_EUR,
   buildApplicationHelpLink,
   isApplicationHelpEnabled,
 } from '@/lib/application-help';
+import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -18,13 +21,201 @@ type PageState =
   | { status: 'loading' }
   | { status: 'not-signed-in' }
   | { status: 'error' }
-  | { status: 'loaded'; matches: MatchResult[]; hasProfile: boolean };
+  | {
+      status: 'loaded';
+      matches: MatchResult[];
+      blurredCount: number;
+      effectiveTier: EffectiveTier;
+      hasProfile: boolean;
+      stateBreakdown: StateCount[];
+    };
+
+// Five differently-shaped placeholder cards, mixed rather than repeated
+// identically — see Monetization-Strategy.md §4.1's blur-then-unlock design:
+// the backend only ever sends a bare count for anything beyond the one free
+// match, never real data, so these have nothing to render but their own
+// shape (varied bar widths/heights, varied factor-line counts).
+const SKELETON_VARIANTS: { factorCount: number; titleWidth: string; hasLocation: boolean }[] = [
+  { factorCount: 3, titleWidth: 'w-2/3', hasLocation: true },
+  { factorCount: 2, titleWidth: 'w-1/2', hasLocation: false },
+  { factorCount: 4, titleWidth: 'w-3/4', hasLocation: true },
+  { factorCount: 1, titleWidth: 'w-5/12', hasLocation: true },
+  { factorCount: 3, titleWidth: 'w-1/3', hasLocation: false },
+];
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M10 1a4 4 0 00-4 4v2H5a2 2 0 00-2 2v7a2 2 0 002 2h10a2 2 0 002-2V9a2 2 0 00-2-2h-1V5a4 4 0 00-4-4zm2 6V5a2 2 0 10-4 0v2h4z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+// Each blurred card carries its own explicit "locked" label rather than
+// looking like a bare loading skeleton — found live 2026-09-29 that an
+// animate-pulse-only placeholder with 33+ of them reads as "still loading",
+// not "intentionally hidden," which is exactly the confusion a real unlock
+// pattern (Glassdoor's blurred salary rows, LinkedIn's blurred viewer list)
+// avoids by always pairing the blur with a lock icon + short label. Also
+// itself a click target straight to checkout, same as those references.
+function BlurredMatchCard({ variant }: { variant: number }) {
+  const shape = SKELETON_VARIANTS[variant % SKELETON_VARIANTS.length];
+  const enabled = isTier1PurchaseEnabled();
+
+  const content = (
+    <>
+      <div aria-hidden className="pointer-events-none select-none opacity-50 blur-[2.5px]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-20 rounded-full bg-slate-200" />
+            <div className={`h-4 ${shape.titleWidth} rounded-full bg-slate-200`} />
+            {shape.hasLocation && <div className="h-3 w-1/3 rounded-full bg-slate-100" />}
+          </div>
+          <div className="h-6 w-20 shrink-0 rounded-full bg-slate-100" />
+        </div>
+        <div className="mt-4 space-y-2">
+          {Array.from({ length: shape.factorCount }).map((_, index) => (
+            <div
+              key={index}
+              className="h-3 rounded-full bg-slate-100"
+              style={{ width: `${70 - index * 12}%` }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-white/60">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900/80 text-white">
+          <LockIcon className="h-4 w-4" />
+        </span>
+        <span className="text-xs font-semibold text-slate-700">Unlock to see this match</span>
+      </div>
+    </>
+  );
+
+  const className =
+    'group relative block overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-emerald-300';
+
+  if (!enabled) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <a href={getTier1PaymentLink()} className={className}>
+      {content}
+    </a>
+  );
+}
+
+// Placed at the TOP of the results, not after them — found live 2026-09-29
+// that with 30+ blurred cards below it, a bottom-of-list banner required
+// scrolling past all of them to ever see it. Same placement as the real
+// references this was modeled on (Glassdoor's "Unlock salaries" bar,
+// LinkedIn's "See who's viewed your profile" banner) — the offer to unlock
+// is the first thing seen, not a reward for scrolling to the end.
+function UnlockBanner({ blurredCount }: { blurredCount: number }) {
+  if (!isTier1PurchaseEnabled()) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+          <LockIcon className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-emerald-900">
+            {blurredCount > 0
+              ? `Unlock all ${blurredCount + 1} matches`
+              : 'Unlock full access to your matches'}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-emerald-800">
+            €{TIER1_PRICE_EUR} unlocks every matching opportunity, plus a quick human review of
+            your profile.
+          </p>
+          <a
+            href={getTier1PaymentLink()}
+            className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          >
+            Unlock — €{TIER1_PRICE_EUR}
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Client-only: Leaflet touches window/document, which breaks under Next's
+// server render even inside an already-'use client' page — the standard
+// fix is a dynamic import with ssr:false. Superseded the earlier flat
+// badge-list design (2026-09-29) after the founder asked for a real map.
+const GermanyMatchesMap = dynamic(
+  () => import('@/components/germany-matches-map').then((mod) => mod.GermanyMatchesMap),
+  { ssr: false, loading: () => <div className="h-80 animate-pulse rounded-3xl bg-slate-100" /> }
+);
 
 const FIT_STYLES: Record<string, string> = {
   'Strong fit': 'bg-emerald-50 text-emerald-700',
   'Possible fit': 'bg-amber-50 text-amber-700',
   'Limited fit': 'bg-slate-100 text-slate-600',
 };
+
+// yyyy-MM-dd strings from the backend's DateOnly fields — timeZone: 'UTC'
+// pins the parsed date to the date it actually names, not whatever the
+// viewer's local offset happens to shift midnight UTC to (a real off-by-one-
+// day risk otherwise, e.g. a US-evening viewer seeing the day before).
+function formatMonthYear(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function formatFullDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+// Real Opportunity fields (tuition/compensation/dates/description/source),
+// gracefully omitted rather than shown as an empty placeholder wherever
+// real data doesn't have them (especially common on Bundesagentur-synced
+// Ausbildung rows) — same discipline as /account's ProfileSection/
+// VerifiedSection. Built 2026-09-29 so the one free match actually gives
+// enough concrete detail to be worth unlocking the rest for.
+function buildMatchDetails(match: MatchResult): string[] {
+  const details: string[] = [];
+
+  if (match.path === 'Ausbildung' && match.monthlyCompensationEur !== null) {
+    details.push(`€${match.monthlyCompensationEur}/month`);
+  }
+
+  if (match.path === 'University') {
+    if (match.tuitionFeeEur === 0) {
+      details.push('Tuition-free');
+    } else if (match.tuitionFeeEur !== null) {
+      details.push(`Tuition: €${match.tuitionFeeEur}`);
+    }
+  }
+
+  if (match.startDate) {
+    details.push(`Starts ${formatMonthYear(match.startDate)}`);
+  }
+
+  if (match.applicationDeadline) {
+    details.push(`Apply by ${formatFullDate(match.applicationDeadline)}`);
+  }
+
+  return details;
+}
 
 // The paid "Get help applying" offer (built 2026-09-12) — see
 // Monetization-Strategy.md §4/§4.4. Deliberately collapsed behind a plain-
@@ -98,6 +289,8 @@ function ApplicationHelpOffer({ match }: { match: MatchResult }) {
 }
 
 function MatchCard({ match }: { match: MatchResult }) {
+  const details = buildMatchDetails(match);
+
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -120,6 +313,23 @@ function MatchCard({ match }: { match: MatchResult }) {
         </span>
       </div>
 
+      {details.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {details.map((detail) => (
+            <span
+              key={detail}
+              className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
+            >
+              {detail}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {match.description && (
+        <p className="mt-3 text-sm leading-6 text-slate-600">{match.description}</p>
+      )}
+
       {match.factors.length > 0 && (
         <ul className="mt-4 space-y-1.5">
           {match.factors.map((factor) => (
@@ -132,6 +342,17 @@ function MatchCard({ match }: { match: MatchResult }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {match.sourceUrl && (
+        <a
+          href={match.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+        >
+          View official page →
+        </a>
       )}
 
       <ApplicationHelpOffer match={match} />
@@ -225,9 +446,16 @@ function MatchesPageContent() {
     // only completing the assessment fixes it. Found live 2026-08-30 on a
     // real account in exactly this state.
     Promise.all([fetchMyMatches(), getCurrentUser()])
-      .then(([matches, user]) => {
+      .then(([matchesResponse, user]) => {
         if (!cancelled) {
-          setState({ status: 'loaded', matches, hasProfile: user?.hasProfile ?? false });
+          setState({
+            status: 'loaded',
+            matches: matchesResponse.matches,
+            blurredCount: matchesResponse.blurredCount,
+            effectiveTier: matchesResponse.effectiveTier,
+            hasProfile: user?.hasProfile ?? false,
+            stateBreakdown: matchesResponse.stateBreakdown,
+          });
         }
       })
       .catch((error) => {
@@ -259,11 +487,14 @@ function MatchesPageContent() {
             <h1 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
               Matching opportunities
             </h1>
-            {state.status === 'loaded' && (
-              <span className="mt-2 inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                {state.matches.length} matching {state.matches.length === 1 ? 'opportunity' : 'opportunities'} found
-              </span>
-            )}
+            {state.status === 'loaded' && (() => {
+              const total = state.matches.length + state.blurredCount;
+              return (
+                <span className="mt-2 inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  {total} matching {total === 1 ? 'opportunity' : 'opportunities'} found
+                </span>
+              );
+            })()}
           </div>
           {state.status === 'loaded' && (
             <button
@@ -330,8 +561,43 @@ function MatchesPageContent() {
             </div>
           )}
 
-          {state.status === 'loaded' && state.hasProfile && (
+          {/* Free tier gets one real match plus a blurred count (never a
+              per-path breakdown, since the backend never sends one — see
+              MatchesResponse's comment) — so the path tabs below, which
+              depend on knowing each match's path, only make sense once
+              everything is unlocked. Deliberately a flat list here instead. */}
+          {state.status === 'loaded' && state.hasProfile && state.effectiveTier === 'Free' && (
             <>
+              {state.matches.length === 0 && state.blurredCount === 0 ? (
+                <p className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                  No matching opportunities yet — check back soon as more real opportunities are
+                  added.
+                </p>
+              ) : (
+                <>
+                  <UnlockBanner blurredCount={state.blurredCount} />
+                  <div className="mt-4">
+                    <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
+                  </div>
+                  <div className="mt-6 space-y-4">
+                    {state.matches.map((match) => (
+                      <MatchCard key={match.opportunityId} match={match} />
+                    ))}
+                    {Array.from({ length: state.blurredCount }).map((_, index) => (
+                      <BlurredMatchCard key={index} variant={index} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {state.status === 'loaded' && state.hasProfile && state.effectiveTier !== 'Free' && (
+            <>
+              <div className="mb-6">
+                <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
+              </div>
+
               <SectionTabs
                 counts={{
                   Ausbildung: state.matches.filter((match) => match.path === 'Ausbildung').length,
