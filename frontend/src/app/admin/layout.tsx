@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AdminKeyContext } from '@/hooks/useAdminKey';
+import { AdminReplyNotificationsContext } from '@/hooks/useAdminReplyNotifications';
+import { useAdminLiveMessages } from '@/hooks/useAdminLiveMessages';
 
 const ADMIN_KEY_STORAGE_KEY = 'novira.admin.key';
 
@@ -29,11 +31,36 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [adminKey, setAdminKeyState] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [keyInput, setKeyInput] = useState('');
+  const [unreadReplyUserIds, setUnreadReplyUserIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAdminKeyState(window.sessionStorage.getItem(ADMIN_KEY_STORAGE_KEY));
     setChecked(true);
+  }, []);
+
+  // Closes the gap found live 2026-09-30: a Tier2+ user's reply only ever
+  // showed up on the admin's next manual page refresh. Tracks WHICH users
+  // have an unseen reply (not a bare count, per the founder's own
+  // correction) — the Users list renders a per-row note from this, and the
+  // user's own detail page clears its entry via markUserReplySeen once
+  // actually opened.
+  useAdminLiveMessages(adminKey, (push) => {
+    setUnreadReplyUserIds((current) => {
+      if (current.has(push.userId)) return current;
+      const next = new Set(current);
+      next.add(push.userId);
+      return next;
+    });
+  });
+
+  const markUserReplySeen = useCallback((userId: string) => {
+    setUnreadReplyUserIds((current) => {
+      if (!current.has(userId)) return current;
+      const next = new Set(current);
+      next.delete(userId);
+      return next;
+    });
   }, []);
 
   const handleUnlock = (event: React.FormEvent<HTMLFormElement>) => {
@@ -82,36 +109,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminKeyContext.Provider value={{ adminKey, clearAdminKey }}>
-      <div className="min-h-screen bg-slate-50">
-        <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
-            <nav className="flex items-center gap-1">
-              {NAV_ITEMS.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-            <button
-              type="button"
-              onClick={clearAdminKey}
-              className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
-            >
-              Log out of admin
-            </button>
-          </div>
-        </header>
-        {children}
-      </div>
+      <AdminReplyNotificationsContext.Provider value={{ unreadReplyUserIds, markUserReplySeen }}>
+        <div className="min-h-screen bg-slate-50">
+          <header className="border-b border-slate-200 bg-white">
+            <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
+              <nav className="flex items-center gap-1">
+                {NAV_ITEMS.map((item) => {
+                  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+              <button
+                type="button"
+                onClick={clearAdminKey}
+                className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
+              >
+                Log out of admin
+              </button>
+            </div>
+          </header>
+          {children}
+        </div>
+      </AdminReplyNotificationsContext.Provider>
     </AdminKeyContext.Provider>
   );
 }

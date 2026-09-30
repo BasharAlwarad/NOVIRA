@@ -97,6 +97,5 @@ export interface ReviewDocumentRequest {
 }
 
 export interface SendMessageRequest {
-  subject: string;
   body: string;
 }

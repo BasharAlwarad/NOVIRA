@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/api/auth';
-import { listMyMessages } from '@/lib/api/messages';
+import { listMyMessages, markAllMessagesRead } from '@/lib/api/messages';
+import type { EffectiveTier } from '@/lib/contracts/account';
 import { usePolling } from '@/hooks/usePolling';
+import { useLiveMessages } from '@/hooks/useLiveMessages';
 
 const navLinks = [
   { label: 'Assessment', href: '/assessment' },
@@ -24,15 +27,19 @@ const UNREAD_POLL_INTERVAL_MS = 45_000;
 // Kept simple: three states (unknown while loading, signed-out, signed-in),
 // no flash of the wrong state is worth engineering around yet at this scale.
 export function SiteNav() {
+  const pathname = usePathname();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasUnread, setHasUnread] = useState(false);
+  const [effectiveTier, setEffectiveTier] = useState<EffectiveTier | null>(null);
 
   // Best-effort — a failed fetch just means a stale/missing badge, not
-  // worth surfacing as an error on every page that renders the nav.
+  // worth surfacing as an error on every page that renders the nav. A
+  // presence dot now (2026-09-30), not a count — the founder's own
+  // correction, matching the same change already made on the admin side.
   const refreshUnreadCount = useCallback(() => {
     listMyMessages()
       .then((messages) => {
-        setUnreadCount(messages.filter((message) => message.readAt === null).length);
+        setHasUnread(messages.some((message) => message.readAt === null));
       })
       .catch(() => {});
   }, []);
@@ -43,6 +50,7 @@ export function SiteNav() {
       .then((user) => {
         if (cancelled) return;
         setSignedIn(user !== null);
+        setEffectiveTier(user?.effectiveTier ?? null);
 
         if (user !== null) {
           refreshUnreadCount();
@@ -58,7 +66,27 @@ export function SiteNav() {
     };
   }, [refreshUnreadCount]);
 
-  usePolling(refreshUnreadCount, UNREAD_POLL_INTERVAL_MS, signedIn === true);
+  // Tier2+ gets instant push instead of waiting up to 45s — see
+  // useLiveMessages.ts's own comment for why this hook is a no-op for
+  // Free/Tier1, who keep exactly this poll as before.
+  const isLiveTier = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
+  usePolling(refreshUnreadCount, UNREAD_POLL_INTERVAL_MS, signedIn === true && !isLiveTier);
+
+  // Found live 2026-09-30: a message arriving while the user is already ON
+  // /account (watching it appear in the thread there) still lit up this
+  // badge, because this hook only ever incremented a local tally — it never
+  // checked whether the user was already looking at it. Same "already
+  // viewing marks it seen" fix as the admin side: being on /account when a
+  // push lands is itself proof it's been seen, so mark it read immediately
+  // instead of flagging it as unread.
+  useLiveMessages(effectiveTier, () => {
+    if (pathname === '/account') {
+      markAllMessagesRead().catch(() => {});
+      setHasUnread(false);
+    } else {
+      setHasUnread(true);
+    }
+  });
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl">
@@ -100,10 +128,8 @@ export function SiteNav() {
                 className="flex items-center gap-1.5 text-sm font-medium text-slate-300 transition hover:text-white"
               >
                 My account
-                {unreadCount > 0 && (
-                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-400 px-1 text-[10px] font-bold text-slate-950">
-                    {unreadCount}
-                  </span>
+                {hasUnread && (
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" aria-label="New message" />
                 )}
               </Link>
             </>
@@ -140,10 +166,8 @@ export function SiteNav() {
             className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
           >
             {signedIn ? 'My account' : 'Start questionnaire'}
-            {signedIn && unreadCount > 0 && (
-              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-950/20 px-1 text-[10px] font-bold text-slate-950">
-                {unreadCount}
-              </span>
+            {signedIn && hasUnread && (
+              <span className="ml-1.5 h-2 w-2 rounded-full bg-slate-950/60" aria-label="New message" />
             )}
           </Link>
         </div>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AdminUnauthorizedError, listUsers } from '@/lib/api/admin-users';
 import type { AdminUserListItem } from '@/lib/contracts/admin-users';
 import { useAdminKey } from '@/hooks/useAdminKey';
+import { useAdminReplyNotifications } from '@/hooks/useAdminReplyNotifications';
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -14,7 +15,12 @@ function formatDate(dateString: string): string {
   });
 }
 
-function UserRow({ user }: { user: AdminUserListItem }) {
+// hasNewReply (added 2026-09-30) — a per-user note, not an aggregate count
+// on the nav, per the founder's own correction: "a note next to the user,
+// not with the amount of new messages received." Sourced from the live
+// SignalR connection the layout maintains (useAdminReplyNotifications),
+// cleared once the admin actually opens that user's detail page.
+function UserRow({ user, hasNewReply }: { user: AdminUserListItem; hasNewReply: boolean }) {
   return (
     <Link
       href={`/admin/users/profiles/${user.id}`}
@@ -34,6 +40,12 @@ function UserRow({ user }: { user: AdminUserListItem }) {
           <p className="mt-1 text-xs text-slate-400">Joined {formatDate(user.createdAt)}</p>
         </div>
         <div className="flex flex-col items-end gap-2">
+          {hasNewReply && (
+            <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+              New message
+            </span>
+          )}
           {user.fraudFlagged && (
             <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
               Flagged
@@ -57,6 +69,7 @@ function UserRow({ user }: { user: AdminUserListItem }) {
 
 export default function AdminUsersProfilesPage() {
   const { adminKey, clearAdminKey } = useAdminKey();
+  const { unreadReplyUserIds } = useAdminReplyNotifications();
   const [users, setUsers] = useState<AdminUserListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
@@ -129,7 +142,7 @@ export default function AdminUsersProfilesPage() {
                 <h2 className="text-sm font-semibold text-amber-700">Needs review</h2>
                 <div className="mt-3 space-y-3">
                   {needsReview.map((user) => (
-                    <UserRow key={user.id} user={user} />
+                    <UserRow key={user.id} user={user} hasNewReply={unreadReplyUserIds.has(user.id)} />
                   ))}
                 </div>
               </section>
@@ -141,7 +154,7 @@ export default function AdminUsersProfilesPage() {
               </h2>
               <div className="mt-3 space-y-3">
                 {others.map((user) => (
-                  <UserRow key={user.id} user={user} />
+                  <UserRow key={user.id} user={user} hasNewReply={unreadReplyUserIds.has(user.id)} />
                 ))}
                 {others.length === 0 && needsReview.length === 0 && (
                   <p className="text-sm text-slate-500">No users yet.</p>

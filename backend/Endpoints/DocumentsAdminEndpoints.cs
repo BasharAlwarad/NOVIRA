@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
+using Novira.Backend.Hubs;
 using Novira.Backend.Models;
 using Novira.Backend.Services;
 
@@ -127,7 +129,7 @@ public record AdminUserDetailResponse(
     List<MessageResponse> Messages);
 
 public record ReviewDocumentRequest(DocumentReviewStatus Status, string? Note);
-public record SendMessageRequest(string Subject, string Body);
+public record SendMessageRequest(string Body);
 
 // Admin-key-protected (AdminAuthFilter) counterpart to DocumentsEndpoints —
 // the founder's review surface for the /admin/users/profiles UI. Every
@@ -207,7 +209,8 @@ public static class DocumentsAdminEndpoints
             ReviewDocumentRequest request,
             AppDbContext db,
             ResendEmailService emailService,
-            AzureBlobStorageService storage) =>
+            AzureBlobStorageService storage,
+            IHubContext<MessagesHub> hub) =>
         {
             if (request.Status is not (DocumentReviewStatus.Approved or DocumentReviewStatus.Denied or DocumentReviewStatus.FlaggedRed))
             {
@@ -263,8 +266,7 @@ public static class DocumentsAdminEndpoints
             if (request.Status is DocumentReviewStatus.Denied or DocumentReviewStatus.FlaggedRed)
             {
                 var (subject, body) = BuildDecisionMessageText(document.Name ?? document.OriginalFileName, request.Status, request.Note);
-                db.Messages.Add(new Message { UserId = user.Id, Subject = subject, Body = body });
-                await db.SaveChangesAsync();
+                await MessagesEndpoints.CreateAdminMessageAsync(db, hub, user.Id, subject, body);
 
                 document.RejectionMessageSent = await emailService.SendMessageNotificationAsync(user.Email);
                 await db.SaveChangesAsync();
@@ -345,16 +347,24 @@ public static class DocumentsAdminEndpoints
 
         // The general-purpose, free-text escape hatch — not tied to any one
         // document, for anything the fixed Approve/Deny/FlagRed actions
-        // don't cover.
+        // don't cover. Subject dropped from this form 2026-09-30 — real
+        // friction on a quick chat-style reply to a Tier2+ conversation,
+        // where the user's own side never has a subject at all (see
+        // MessagesEndpoints.cs's POST / and Message.cs's comment). The
+        // underlying Message.Subject column stays required — the
+        // Deny/FlagRed auto-notices (BuildDecisionMessageText) still carry
+        // a real, meaningful subject; only this free-text send gets a
+        // fixed generic one.
         group.MapPost("/{userId:guid}/message", async (
             Guid userId,
             SendMessageRequest request,
             AppDbContext db,
-            ResendEmailService emailService) =>
+            ResendEmailService emailService,
+            IHubContext<MessagesHub> hub) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Subject) || string.IsNullOrWhiteSpace(request.Body))
+            if (string.IsNullOrWhiteSpace(request.Body))
             {
-                return Results.BadRequest(new { message = "Subject and body are required." });
+                return Results.BadRequest(new { message = "Message body is required." });
             }
 
             var user = await db.Users.FindAsync(userId);
@@ -366,8 +376,7 @@ public static class DocumentsAdminEndpoints
             // Same in-app-first shift as the decision-email branch above —
             // the message is always persisted; `sent` reflects only whether
             // the notification ping succeeded.
-            db.Messages.Add(new Message { UserId = user.Id, Subject = request.Subject, Body = request.Body });
-            await db.SaveChangesAsync();
+            await MessagesEndpoints.CreateAdminMessageAsync(db, hub, user.Id, "Message from our team", request.Body);
 
             var sent = await emailService.SendMessageNotificationAsync(user.Email);
             return Results.Ok(new { sent });
@@ -393,7 +402,7 @@ public static class DocumentsAdminEndpoints
             purchases.Select(p => new AdminPurchaseResponse(
                 p.Id, p.Tier.ToString(), p.AmountEur, p.Status.ToString(), p.CreatedAt, p.RefundedAt)).ToList(),
             documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
-            messages.Select(m => new MessageResponse(m.Id, m.Subject, m.Body, m.CreatedAt, m.ReadAt)).ToList());
+            messages.Select(MessagesEndpoints.ToResponse).ToList());
 
     private static Task<List<Message>> LoadMessagesAsync(AppDbContext db, Guid userId) =>
         db.Messages.Where(m => m.UserId == userId).OrderByDescending(m => m.CreatedAt).ToListAsync();

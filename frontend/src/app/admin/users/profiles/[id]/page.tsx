@@ -14,6 +14,8 @@ import {
 import type { AdminDocument, AdminPurchase, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
 import type { Message } from '@/lib/contracts/messages';
 import { useAdminKey } from '@/hooks/useAdminKey';
+import { useAdminLiveMessages } from '@/hooks/useAdminLiveMessages';
+import { useAdminReplyNotifications } from '@/hooks/useAdminReplyNotifications';
 
 function humanizeEnumValue(value: string): string {
   return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
@@ -252,13 +254,19 @@ function DocumentCard({
 // invisible on this page entirely: sending a message had no track record
 // here, only the user could see it (on /account). Includes every message
 // regardless of origin, since free-text sends and the automatic Deny/
-// FlagRed notices both land in the same Messages table.
+// FlagRed notices both land in the same Messages table. User-authored
+// replies (Sender: 'User', Tier2+ only — see Message.cs's comment) are
+// visually distinct and skip the Read/Unread badge, since ReadAt only ever
+// tracks the USER's read state (POST /messages/read-all) — meaningless for
+// a message the user wrote themselves. Not yet live-pushed to this page
+// (see MessagesHub.cs's comment); a reply appears on the next manual
+// refresh.
 function MessageHistorySection({ messages }: { messages: Message[] }) {
   return (
     <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
       <h2 className="text-sm font-semibold text-slate-900">Message history</h2>
       <p className="mt-1 text-xs text-slate-500">
-        Everything sent to this user, including automatic notices from document decisions.
+        Everything exchanged with this user, including automatic notices from document decisions.
       </p>
 
       <div className="mt-3 space-y-3">
@@ -266,17 +274,28 @@ function MessageHistorySection({ messages }: { messages: Message[] }) {
           <p className="text-sm text-slate-500">No messages sent yet.</p>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div
+              key={message.id}
+              className={`rounded-2xl p-4 ${
+                message.sender === 'User'
+                  ? 'border border-emerald-200 bg-emerald-50/60'
+                  : 'border border-slate-200 bg-slate-50'
+              }`}
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-950">{message.subject}</p>
+                <p className="text-sm font-semibold text-slate-950">
+                  {message.sender === 'User' ? 'From user' : message.subject}
+                </p>
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                      message.readAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}
-                  >
-                    {message.readAt ? 'Read' : 'Unread'}
-                  </span>
+                  {message.sender === 'Admin' && (
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        message.readAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {message.readAt ? 'Read' : 'Unread'}
+                    </span>
+                  )}
                   <p className="text-xs text-slate-400">{formatDateTime(message.createdAt)}</p>
                 </div>
               </div>
@@ -289,8 +308,10 @@ function MessageHistorySection({ messages }: { messages: Message[] }) {
   );
 }
 
-function MessageForm({ onSend }: { onSend: (subject: string, body: string) => Promise<void> }) {
-  const [subject, setSubject] = useState('');
+// Subject dropped 2026-09-30 — real friction on a quick chat-style reply
+// to a Tier2+ conversation, where the user's own reply box never has one
+// either (see backend/Endpoints/DocumentsAdminEndpoints.cs's comment).
+function MessageForm({ onSend }: { onSend: (body: string) => Promise<void> }) {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -300,8 +321,7 @@ function MessageForm({ onSend }: { onSend: (subject: string, body: string) => Pr
     setSending(true);
     setResult(null);
     try {
-      await onSend(subject, body);
-      setSubject('');
+      await onSend(body);
       setBody('');
       setResult("Message sent — visible in the user's account.");
     } catch {
@@ -314,20 +334,13 @@ function MessageForm({ onSend }: { onSend: (subject: string, body: string) => Pr
   return (
     <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-white p-5">
       <h2 className="text-sm font-semibold text-slate-900">Send a message</h2>
-      <input
-        required
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        placeholder="Subject"
-        className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
-      />
       <textarea
         required
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="Message"
         rows={4}
-        className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
+        className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
       />
       <div className="mt-3 flex items-center gap-3">
         <button
@@ -654,6 +667,7 @@ export default function AdminUserProfilePage() {
   const userId = params.id;
 
   const { adminKey, clearAdminKey } = useAdminKey();
+  const { markUserReplySeen } = useAdminReplyNotifications();
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recomputing, setRecomputing] = useState(false);
@@ -677,6 +691,24 @@ export default function AdminUserProfilePage() {
     loadUser();
   }, [loadUser]);
 
+  // Opening this page counts as having seen this user's pending reply
+  // note on the list — clears their entry in the shared unread set.
+  useEffect(() => {
+    markUserReplySeen(userId);
+  }, [userId, markUserReplySeen]);
+
+  // If this page is open when the very user being viewed sends a reply,
+  // refresh live instead of waiting for a manual reload — the exact gap
+  // found live 2026-09-30. Same "refetch the whole user" pattern as
+  // handleReview below, not a local splice. Also clears the note
+  // immediately rather than leaving it flagged until the next list visit.
+  useAdminLiveMessages(adminKey, (push) => {
+    if (push.userId === userId) {
+      loadUser();
+      markUserReplySeen(userId);
+    }
+  });
+
   // Refetches the whole user rather than locally patching one field — a
   // review action can touch documents, verified data, the fraud flag, AND
   // (for Deny/FlagRed) message history all at once, so a full reload is
@@ -686,8 +718,8 @@ export default function AdminUserProfilePage() {
     await loadUser();
   };
 
-  const handleSendMessage = async (subject: string, body: string) => {
-    await sendMessageToUser(adminKey, userId, { subject, body });
+  const handleSendMessage = async (body: string) => {
+    await sendMessageToUser(adminKey, userId, { body });
     await loadUser();
   };
 

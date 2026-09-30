@@ -5,6 +5,7 @@
 // read (see frontend/src/app/api/auth/verify/route.ts).
 
 import type { ProfileSnapshot } from '@/lib/contracts/leads';
+import type { EffectiveTier } from '@/lib/contracts/account';
 
 // profile is optional (verifying an email doesn't require a completed
 // assessment) but SignupPrompt always sends it when available, same as
@@ -37,4 +38,5 @@ export interface VerifyResponse {
 export interface MeResponse {
   email: string;
   hasProfile: boolean;
+  effectiveTier: EffectiveTier;
 }

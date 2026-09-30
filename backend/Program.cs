@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
 using Novira.Backend.Endpoints;
+using Novira.Backend.Hubs;
 using Novira.Backend.Models;
 using Novira.Backend.Services;
 
@@ -47,6 +48,15 @@ builder.Services.AddScoped<AzureBlobStorageService>();
 builder.Services.AddScoped<DocumentVerificationService>();
 builder.Services.AddScoped<ResendEmailService>();
 builder.Services.AddScoped<StripeCheckoutClient>();
+
+// Live push for the in-app Messages system (Tier2+ only — see Message.cs's
+// comment). Singleton, not scoped: the ticket store's whole job is holding
+// state across requests (a ticket minted by one HTTP request must be
+// consumable by the later, separate request that opens the Hub
+// connection), and SignalR's own connection/group tracking is inherently
+// singleton-scoped regardless.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<LiveMessagingTicketStore>();
 
 // Coarse per-IP ceiling on /leads. Note this only ever sees the Next.js
 // server's IP for browser traffic (the frontend proxies the request
@@ -150,6 +160,7 @@ app.MapDocumentsAdminEndpoints();
 app.MapAccountEndpoints();
 app.MapMessagesEndpoints();
 app.MapPurchasesEndpoints();
+app.MapHub<MessagesHub>("/hubs/messages");
 
 app.MapPost("/leads", async (
     SaveResultRequest request,

@@ -6,13 +6,16 @@ import { useRouter } from 'next/navigation';
 import { deleteMyAccount, fetchMyAccount, NotSignedInError as NoAccountSession } from '@/lib/api/account';
 import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
-import { listMyMessages, markAllMessagesRead } from '@/lib/api/messages';
+import { listMyMessages, markAllMessagesRead, sendMyMessage } from '@/lib/api/messages';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
 import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
 import type { Message } from '@/lib/contracts/messages';
+import type { PurchaseTier } from '@/lib/contracts/purchases';
 import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
+import { Tier2UpsellCard } from '@/components/tier2-upsell';
 import { usePolling } from '@/hooks/usePolling';
+import { useLiveMessages } from '@/hooks/useLiveMessages';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -323,13 +326,47 @@ function formatMessageDateTime(dateString: string): string {
 // Read state is page-level, not per-message (see the comment on the backend
 // endpoint) — the unread dot reflects the snapshot from when this section
 // loaded and won't reappear until a genuinely new message arrives on a
-// future visit.
-function MessagesSection({ messages }: { messages: Message[] | null }) {
+// future visit. Two-way (reply box + sender-differentiated bubbles) added
+// 2026-09-30, gated to Tier2+ — Free/Tier1 see exactly the original
+// one-way, subject-led layout unchanged.
+function MessagesSection({
+  messages,
+  effectiveTier,
+  onSent,
+}: {
+  messages: Message[] | null;
+  effectiveTier: EffectiveTier;
+  onSent: (message: Message) => void;
+}) {
+  const canReply = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!draft.trim()) return;
+
+    setSending(true);
+    setError(null);
+    try {
+      const sent = await sendMyMessage({ body: draft.trim() });
+      setDraft('');
+      onSent(sent);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send — try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5">
       <h2 className="text-sm font-semibold text-slate-900">Messages</h2>
       <p className="mt-1 text-xs text-slate-500">
-        Updates from our team — document decisions and anything else we send you land here.
+        {canReply
+          ? 'Live chat with our team — replies arrive instantly.'
+          : 'Updates from our team — document decisions and anything else we send you land here.'}
       </p>
 
       <div className="mt-4 space-y-3">
@@ -339,13 +376,20 @@ function MessagesSection({ messages }: { messages: Message[] | null }) {
           <p className="text-sm text-slate-500">No messages yet.</p>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div
+              key={message.id}
+              className={`rounded-2xl p-4 ${
+                message.sender === 'User'
+                  ? 'ml-6 bg-emerald-50 sm:ml-12'
+                  : 'mr-6 border border-slate-200 bg-slate-50 sm:mr-12'
+              }`}
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                  {message.readAt === null && (
+                  {message.readAt === null && message.sender === 'Admin' && (
                     <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" aria-label="Unread" />
                   )}
-                  {message.subject}
+                  {message.sender === 'Admin' ? message.subject : 'You'}
                 </p>
                 <p className="shrink-0 text-xs text-slate-400">{formatMessageDateTime(message.createdAt)}</p>
               </div>
@@ -354,6 +398,28 @@ function MessagesSection({ messages }: { messages: Message[] | null }) {
           ))
         )}
       </div>
+
+      {canReply && (
+        <form onSubmit={handleSend} className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Type a message…"
+            rows={2}
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={!draft.trim() || sending}
+              className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {sending ? 'Sending…' : 'Send'}
+            </button>
+            {error && <p className="text-xs text-red-600">{error}</p>}
+          </div>
+        </form>
+      )}
     </section>
   );
 }
@@ -366,9 +432,14 @@ const TIER_LABELS: Record<EffectiveTier, string> = {
 };
 
 // "Where the user unlocks... shows what tier or level he is on and what can
-// he unlock" — the founder's own framing for where this belongs. Only
-// offers the Tier 1 upsell today since Tier 2/3 don't have a checkout flow
-// yet (Monetization-Strategy.md §4.1's phased build order).
+// he unlock" — the founder's own framing for where this belongs. Tier 2's
+// upsell (added 2026-09-29) deliberately describes only what the tier IS
+// (Monetization-Strategy.md §4.1's real scope), not how it's delivered —
+// the CV-generation system and interview-booking mechanism aren't built
+// yet, same "sell the defined tier, fulfill it manually for now" precedent
+// Tier 1's own still-manual "human review" already set. Wording checked
+// against Legal.md/novira-legal-check: "help you prepare/apply," never
+// "we apply for you" (that's Tier 3's line), no outcome guarantees.
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5">
@@ -390,6 +461,12 @@ function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
           >
             Unlock — €{TIER1_PRICE_EUR}
           </a>
+        </div>
+      )}
+
+      {effectiveTier === 'Tier1' && (
+        <div className="mt-4">
+          <Tier2UpsellCard />
         </div>
       )}
     </section>
@@ -523,26 +600,31 @@ export default function AccountPage() {
     }
   }, [router]);
 
-  // Lands here from the Tier 1 Stripe Payment Link's "after payment"
-  // redirect (configured in the Stripe dashboard, not in this app) —
+  // Lands here from a Stripe Payment Link's "after payment" redirect
+  // (configured per-tier in the Stripe dashboard, not in this app) —
   // ?checkout_session={CHECKOUT_SESSION_ID}. Verified server-side before any
   // access is granted (see PurchasesEndpoints.cs's comment on why this
-  // exists instead of a webhook). Hardcoded to Tier1 for now since that's
-  // the only tier with a real checkout flow yet — once Tier 2/3 Payment
-  // Links exist, this needs the tier encoded in the redirect URL too rather
-  // than assumed.
+  // exists instead of a webhook). The tier itself comes from a &tier=
+  // param on the redirect URL, defaulting to Tier1 for backward
+  // compatibility with the existing Tier 1 Payment Link (created before
+  // this param existed) — any newly created Payment Link (Tier2+) should
+  // include &tier=Tier2 etc. in its configured redirect URL.
   useEffect(() => {
-    const sessionId = new URLSearchParams(window.location.search).get('checkout_session');
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('checkout_session');
     if (!sessionId) return;
+
+    const tierParam = params.get('tier');
+    const tier: PurchaseTier = tierParam === 'Tier2' || tierParam === 'Tier3' ? tierParam : 'Tier1';
 
     router.replace('/account');
 
-    verifyCheckoutSession({ tier: 'Tier1', sessionId })
+    verifyCheckoutSession({ tier, sessionId })
       .then((result) => {
         setCheckoutMessage({
           text: result.alreadyProcessed
-            ? 'Payment already confirmed — your matches are unlocked.'
-            : 'Payment confirmed — your matches are unlocked.',
+            ? `Payment already confirmed — you're on ${TIER_LABELS[result.effectiveTier]}.`
+            : `Payment confirmed — you're on ${TIER_LABELS[result.effectiveTier]}.`,
           isError: false,
         });
         return fetchMyAccount();
@@ -560,11 +642,29 @@ export default function AccountPage() {
       });
   }, [router]);
 
+  const effectiveTier = state.status === 'loaded' ? state.account.effectiveTier : null;
+  const isLiveTier = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
+
   // A new message won't otherwise appear until the page is manually
-  // reloaded — this is what actually fixes that, without the complexity of
-  // a real push mechanism (WebSockets/SSE) for what's just asynchronous
-  // notifications, not live chat.
-  usePolling(loadMessages, MESSAGE_POLL_INTERVAL_MS, state.status === 'loaded');
+  // reloaded — for Free/Tier1 this poll is still what fixes that; Tier2+
+  // gets instant push instead (see useLiveMessages.ts) and this poll turns
+  // off for them, since the live connection already keeps them current.
+  usePolling(loadMessages, MESSAGE_POLL_INTERVAL_MS, state.status === 'loaded' && !isLiveTier);
+
+  // Prepends live-pushed messages straight into the visible list — a
+  // duplicate is possible if a poll and a push race (harmless, just
+  // de-duped by id) rather than something worth coordinating around. Also
+  // marks it read immediately (found live 2026-09-30: it was staying
+  // flagged unread even while visibly being looked at on this exact page)
+  // — being on /account when it arrives is itself proof it's been seen,
+  // same reasoning as SiteNav's own fix.
+  useLiveMessages(effectiveTier, (message) => {
+    setMessages((current) => {
+      const withoutDuplicate = (current ?? []).filter((m) => m.id !== message.id);
+      return [message, ...withoutDuplicate];
+    });
+    markAllMessagesRead().catch(() => {});
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -651,7 +751,11 @@ export default function AccountPage() {
               <ProfileSection account={state.account} />
               <VerifiedSection account={state.account} />
               <DocumentsSection documents={documents} onUploaded={loadDocuments} />
-              <MessagesSection messages={messages} />
+              <MessagesSection
+                messages={messages}
+                effectiveTier={state.account.effectiveTier}
+                onSent={(message) => setMessages((current) => [message, ...(current ?? [])])}
+              />
               <div className="pt-2">
                 <Link href="/matches" className="text-sm text-emerald-700 underline underline-offset-2">
                   View my matching opportunities →

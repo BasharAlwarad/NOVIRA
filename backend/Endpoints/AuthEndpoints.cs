@@ -40,7 +40,7 @@ public record VerifyRequest(string Token);
 // profile-less fresh signup somewhere useful (/account) instead of /matches,
 // which would otherwise just show an unexplained empty result.
 public record VerifyResponse(string SessionToken, string Email, bool HasProfile);
-public record MeResponse(string Email, bool HasProfile);
+public record MeResponse(string Email, bool HasProfile, string EffectiveTier);
 
 /// <summary>
 /// The account-signup boundary from Plan.md §4 — free, email-only,
@@ -222,10 +222,13 @@ public static class AuthEndpoints
 
         var authenticated = app.MapGroup("/auth").AddEndpointFilter<SessionAuthFilter>();
 
-        authenticated.MapGet("/me", (HttpContext httpContext) =>
+        authenticated.MapGet("/me", async (HttpContext httpContext, AppDbContext db) =>
         {
             var user = (User)httpContext.Items["CurrentUser"]!;
-            return Results.Ok(new MeResponse(user.Email, user.ProfileUpdatedAt is not null));
+            var purchases = await db.Purchases.Where(p => p.UserId == user.Id).ToListAsync();
+            var effectiveTier = EffectiveTierCalculator.Compute(purchases);
+
+            return Results.Ok(new MeResponse(user.Email, user.ProfileUpdatedAt is not null, effectiveTier.ToString()));
         });
 
         authenticated.MapPost("/logout", async (HttpContext httpContext, AppDbContext db) =>
