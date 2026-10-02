@@ -7,7 +7,9 @@ using Novira.Backend.Services;
 
 namespace Novira.Backend.Endpoints;
 
-public record MessageResponse(Guid Id, string Subject, string Body, DateTime CreatedAt, DateTime? ReadAt, string Sender);
+public record MessageResponse(
+    Guid Id, string Subject, string Body, DateTime CreatedAt, DateTime? ReadAt, string Sender,
+    bool HasAttachment, string? AttachmentFileName);
 
 public record SendUserMessageRequest(string Body);
 
@@ -33,6 +35,29 @@ public static class MessagesEndpoints
                 .ToListAsync();
 
             return Results.Ok(messages.Select(ToResponse));
+        });
+
+        // Short-lived SAS URI for a message's attachment, fetched on demand
+        // — same "never persist a permanent link, generate on read" pattern
+        // as the document-preview URLs. Ownership-checked: a user can only
+        // ever fetch their own message's attachment.
+        group.MapGet("/{id:guid}/attachment", async (Guid id, HttpContext httpContext, AppDbContext db, AzureBlobStorageService storage) =>
+        {
+            var user = (User)httpContext.Items["CurrentUser"]!;
+            var message = await db.Messages.FirstOrDefaultAsync(m => m.Id == id && m.UserId == user.Id);
+
+            if (message?.AttachmentBlobName is null)
+            {
+                return Results.NotFound();
+            }
+
+            // .AbsoluteUri, not .ToString() — the latter returns a "human
+            // readable" unescaped form (found live 2026-10-02: a real
+            // opportunity title with spaces/slashes produced a URL curl
+            // couldn't even connect to). downloadFileName forces a real
+            // download with the correct name instead of an inline view.
+            var url = storage.GenerateReadSasUri(message.AttachmentBlobName, downloadFileName: message.AttachmentFileName);
+            return Results.Ok(new { url = url.AbsoluteUri });
         });
 
         // Page-level read tracking, not per-message — viewing the account
@@ -115,24 +140,52 @@ public static class MessagesEndpoints
 
             return Results.Ok(new { ticket = ticketStore.IssueTicket(user.Id) });
         });
+
+        // The admin-side counterpart of the user attachment endpoint above
+        // — lets the founder re-download exactly what was sent, e.g. to
+        // double-check a delivery. Registered outside the session-filtered
+        // group since it's admin-key, not session, protected.
+        app.MapGet("/admin/messages/{id:guid}/attachment", async (Guid id, AppDbContext db, AzureBlobStorageService storage) =>
+        {
+            var message = await db.Messages.FindAsync(id);
+            if (message?.AttachmentBlobName is null)
+            {
+                return Results.NotFound();
+            }
+
+            var url = storage.GenerateReadSasUri(message.AttachmentBlobName, downloadFileName: message.AttachmentFileName);
+            return Results.Ok(new { url = url.AbsoluteUri });
+        }).AddEndpointFilter<AdminAuthFilter>();
     }
 
     // Shared with DocumentsAdminEndpoints.cs's AdminUserDetailResponse,
     // which builds its own MessageResponse list from the same Message rows
     // — kept in sync here rather than duplicating the mapping.
     public static MessageResponse ToResponse(Message m) =>
-        new(m.Id, m.Subject, m.Body, m.CreatedAt, m.ReadAt, m.Sender.ToString());
+        new(m.Id, m.Subject, m.Body, m.CreatedAt, m.ReadAt, m.Sender.ToString(),
+            m.AttachmentBlobName is not null, m.AttachmentFileName);
 
     // Shared by DocumentsAdminEndpoints.cs's two admin-message-creation
-    // paths (the free-text send, and the Deny/FlagRed auto-message) so the
+    // paths (the free-text send, and the Deny/FlagRed auto-message) plus
+    // CvRequestsAdminEndpoints.cs's real CV/cover-letter delivery, so the
     // "create it, then push live if the recipient can receive it" logic
     // lives in one place. Live push only fires for Tier2+ — Free/Tier1
     // recipients still get the message, just via the existing 45s poll,
-    // same as before this feature existed.
+    // same as before this feature existed. Attachment params are optional —
+    // every existing call site (no attachment) is unaffected.
     public static async Task<Message> CreateAdminMessageAsync(
-        AppDbContext db, IHubContext<MessagesHub> hub, Guid userId, string subject, string body)
+        AppDbContext db, IHubContext<MessagesHub> hub, Guid userId, string subject, string body,
+        string? attachmentBlobName = null, string? attachmentFileName = null, string? attachmentContentType = null)
     {
-        var message = new Message { UserId = userId, Subject = subject, Body = body };
+        var message = new Message
+        {
+            UserId = userId,
+            Subject = subject,
+            Body = body,
+            AttachmentBlobName = attachmentBlobName,
+            AttachmentFileName = attachmentFileName,
+            AttachmentContentType = attachmentContentType,
+        };
         db.Messages.Add(message);
         await db.SaveChangesAsync();
 

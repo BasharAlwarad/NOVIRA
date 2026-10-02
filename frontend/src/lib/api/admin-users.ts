@@ -92,6 +92,25 @@ export async function deleteUser(adminKey: string, userId: string): Promise<void
   }
 }
 
+// Fresh SAS URL for a message's attachment, fetched on click — see
+// MessagesEndpoints.cs's admin attachment endpoint. {id} in the proxy path
+// is the userId (kept for route-shape consistency, unused by the backend
+// call itself).
+export async function fetchMessageAttachmentUrl(
+  adminKey: string,
+  userId: string,
+  messageId: string
+): Promise<string> {
+  const response = await adminFetch(`/api/admin/users/${userId}/messages/${messageId}/attachment`, adminKey);
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch attachment.');
+  }
+
+  const data = (await response.json()) as { url: string };
+  return data.url;
+}
+
 export async function sendMessageToUser(
   adminKey: string,
   userId: string,

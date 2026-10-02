@@ -10,6 +10,12 @@ export interface Message {
   createdAt: string;
   readAt: string | null;
   sender: 'Admin' | 'User';
+  // A real file delivery (e.g. a generated CV/cover-letter PDF, added
+  // 2026-10-02) — the attachment itself is never included here, only
+  // whether one exists. Fetch it on demand via GET /messages/{id}/attachment,
+  // same "generate a short-lived SAS URL on read" pattern as document previews.
+  hasAttachment: boolean;
+  attachmentFileName: string | null;
 }
 
 export interface SendUserMessageRequest {

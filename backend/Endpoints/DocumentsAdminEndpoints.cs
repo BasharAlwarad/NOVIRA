@@ -126,7 +126,14 @@ public record AdminUserDetailResponse(
     // both land in the same Messages table, so this is a full audit trail,
     // not just what the admin typed manually. Reuses MessagesEndpoints.cs's
     // MessageResponse rather than duplicating an identical record.
-    List<MessageResponse> Messages);
+    List<MessageResponse> Messages,
+    // The Tier 2 CV-intake profile (work history, education, skills — see
+    // IntakeEndpoints.cs), null if the user hasn't started one. Added
+    // 2026-10-01 to close a real gap: a CV request showed up in the admin
+    // queue with no way to see the actual intake content it's supposed to
+    // be built from, anywhere in the admin UI. Reuses
+    // IntakeEndpoints.IntakeProfileResponse rather than a second copy.
+    IntakeProfileResponse? Intake);
 
 public record ReviewDocumentRequest(DocumentReviewStatus Status, string? Note);
 public record SendMessageRequest(string Body);
@@ -199,8 +206,9 @@ public static class DocumentsAdminEndpoints
                 .ToListAsync();
             var messages = await LoadMessagesAsync(db, id);
             var purchases = await LoadPurchasesAsync(db, id);
+            var intake = await LoadIntakeProfileAsync(db, id);
 
-            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage));
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake));
         });
 
         group.MapPatch("/{userId:guid}/documents/{documentId:guid}", async (
@@ -307,8 +315,9 @@ public static class DocumentsAdminEndpoints
                 .ToListAsync();
             var messages = await LoadMessagesAsync(db, id);
             var purchases = await LoadPurchasesAsync(db, id);
+            var intake = await LoadIntakeProfileAsync(db, id);
 
-            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage));
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake));
         });
 
         // Admin-initiated full account deletion — the same real, complete
@@ -384,7 +393,8 @@ public static class DocumentsAdminEndpoints
     }
 
     private static AdminUserDetailResponse ToAdminUserDetailResponse(
-        User user, List<UserDocument> documents, List<Message> messages, List<Purchase> purchases, AzureBlobStorageService storage) =>
+        User user, List<UserDocument> documents, List<Message> messages, List<Purchase> purchases,
+        AzureBlobStorageService storage, IntakeProfile? intake) =>
         new(
             user.Id, user.Email, user.FullName, user.CreatedAt,
             user.FraudFlagged, user.FraudFlaggedAt, user.FraudFlagNote,
@@ -402,13 +412,17 @@ public static class DocumentsAdminEndpoints
             purchases.Select(p => new AdminPurchaseResponse(
                 p.Id, p.Tier.ToString(), p.AmountEur, p.Status.ToString(), p.CreatedAt, p.RefundedAt)).ToList(),
             documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
-            messages.Select(MessagesEndpoints.ToResponse).ToList());
+            messages.Select(MessagesEndpoints.ToResponse).ToList(),
+            intake is null ? null : IntakeEndpoints.ToResponse(intake));
 
     private static Task<List<Message>> LoadMessagesAsync(AppDbContext db, Guid userId) =>
         db.Messages.Where(m => m.UserId == userId).OrderByDescending(m => m.CreatedAt).ToListAsync();
 
     private static Task<List<Purchase>> LoadPurchasesAsync(AppDbContext db, Guid userId) =>
         db.Purchases.Where(p => p.UserId == userId).OrderByDescending(p => p.CreatedAt).ToListAsync();
+
+    private static Task<IntakeProfile?> LoadIntakeProfileAsync(AppDbContext db, Guid userId) =>
+        db.IntakeProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
 
     // allDocuments, when provided, resolves SupersedesDocumentName from the
     // same set already being built (list/detail views) — no extra query.
@@ -421,7 +435,7 @@ public static class DocumentsAdminEndpoints
         string? previewUrl = null;
         try
         {
-            previewUrl = storage.GenerateReadSasUri(d.StorageBlobName).ToString();
+            previewUrl = storage.GenerateReadSasUri(d.StorageBlobName).AbsoluteUri;
         }
         catch (Exception)
         {

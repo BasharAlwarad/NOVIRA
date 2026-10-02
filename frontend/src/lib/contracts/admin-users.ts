@@ -2,6 +2,7 @@ import type { ProfileSnapshot, VerifiedProfile } from '@/lib/contracts/leads';
 import type { DocumentType, AiVerificationStatus, DocumentReviewStatus } from '@/lib/contracts/documents';
 import type { Message } from '@/lib/contracts/messages';
 import type { EffectiveTier } from '@/lib/contracts/account';
+import type { IntakeProfile } from '@/lib/contracts/intake';
 
 // Mirrors backend/Endpoints/DocumentsAdminEndpoints.cs's response records.
 
@@ -89,6 +90,11 @@ export interface AdminUserDetail extends ProfileSnapshot, VerifiedProfile {
   // and the automatic Deny/FlagRed notices both land here (see the backend
   // comment on AdminUserDetailResponse), so this is a full audit trail.
   messages: Message[];
+  // The Tier 2 CV-intake profile (work history, education, skills), null if
+  // the user hasn't started one — added 2026-10-01 to close a real gap: a
+  // CV request had no way to show the actual intake content it's meant to
+  // be built from, anywhere in the admin UI.
+  intake: IntakeProfile | null;
 }
 
 export interface ReviewDocumentRequest {

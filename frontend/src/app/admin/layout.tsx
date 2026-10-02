@@ -12,6 +12,7 @@ const ADMIN_KEY_STORAGE_KEY = 'novira.admin.key';
 const NAV_ITEMS = [
   { label: 'Opportunities', href: '/admin/opportunities' },
   { label: 'Users', href: '/admin/users/profiles' },
+  { label: 'CV requests', href: '/admin/cv-requests' },
 ];
 
 // The single admin gate — every /admin/* page used to duplicate this exact

@@ -22,6 +22,144 @@ namespace Novira.Backend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Novira.Backend.Models.CvReferenceSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GuideText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CvReferenceSettings");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.CvRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConversationJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CoverLetterContentJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CvContentJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsReferenceExample")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastGeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OpportunityProvider")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OpportunityTitle")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RevisionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OpportunityId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("CvRequests");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.IntakeProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Certifications")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DateOfBirth")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("DrivingLicence")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("EducationJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExperienceJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Hobbies")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhotoBlobName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhotoContentType")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TechnicalSkills")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("IntakeProfiles");
+                });
+
             modelBuilder.Entity("Novira.Backend.Models.MagicLinkToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -62,6 +200,15 @@ namespace Novira.Backend.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("AttachmentBlobName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AttachmentContentType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AttachmentFileName")
+                        .HasColumnType("text");
 
                     b.Property<string>("Body")
                         .IsRequired()
@@ -420,6 +567,30 @@ namespace Novira.Backend.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("UserDocuments");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.CvRequest", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.IntakeProfile", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Novira.Backend.Models.MagicLinkToken", b =>

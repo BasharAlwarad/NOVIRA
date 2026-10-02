@@ -6,7 +6,9 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { getCurrentUser, logout } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
+import { listMyCvRequests, requestCv } from '@/lib/api/cv-requests';
 import type { MatchResult, StateCount } from '@/lib/contracts/matches';
+import type { CvRequest, CvRequestStatus } from '@/lib/contracts/cv-requests';
 import type { EffectiveTier } from '@/lib/contracts/account';
 import {
   APPLICATION_HELP_PRICE_EUR,
@@ -29,6 +31,7 @@ type PageState =
       effectiveTier: EffectiveTier;
       hasProfile: boolean;
       stateBreakdown: StateCount[];
+      cvRequests: CvRequest[];
     };
 
 // Five differently-shaped placeholder cards, mixed rather than repeated
@@ -289,7 +292,82 @@ function ApplicationHelpOffer({ match }: { match: MatchResult }) {
   );
 }
 
-function MatchCard({ match }: { match: MatchResult }) {
+const CV_REQUEST_STATUS_LABELS: Record<CvRequestStatus, string> = {
+  Requested: "CV requested — we'll review your profile and be in touch",
+  InReview: 'CV in review',
+  Delivered: 'CV delivered — check your messages',
+};
+
+// Tier2+'s per-match "request a CV" action (Architecture.md's "Tier 2
+// services" build order, step 3) — tied to this specific opportunity, not a
+// generic request, since a tailored CV needs the match's own requirements.
+// Server-side Tier2+-gated (POST /cv-requests), not just hidden here — this
+// early return is a UX nicety, not the actual access control.
+function CvRequestAction({
+  match,
+  effectiveTier,
+  existingRequest,
+  onRequested,
+}: {
+  match: MatchResult;
+  effectiveTier: EffectiveTier;
+  existingRequest: CvRequest | undefined;
+  onRequested: (request: CvRequest) => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (effectiveTier !== 'Tier2' && effectiveTier !== 'Tier3') {
+    return null;
+  }
+
+  if (existingRequest) {
+    return (
+      <p className="mt-4 text-xs font-semibold text-emerald-700">
+        ✓ {CV_REQUEST_STATUS_LABELS[existingRequest.status]}
+      </p>
+    );
+  }
+
+  const handleRequest = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const request = await requestCv(match.opportunityId);
+      onRequested(request);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to request a CV.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={handleRequest}
+        disabled={submitting}
+        className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {submitting ? 'Requesting…' : 'Request a CV for this match'}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function MatchCard({
+  match,
+  effectiveTier,
+  cvRequest,
+  onCvRequested,
+}: {
+  match: MatchResult;
+  effectiveTier: EffectiveTier;
+  cvRequest: CvRequest | undefined;
+  onCvRequested: (request: CvRequest) => void;
+}) {
   const details = buildMatchDetails(match);
 
   return (
@@ -357,6 +435,12 @@ function MatchCard({ match }: { match: MatchResult }) {
       )}
 
       <ApplicationHelpOffer match={match} />
+      <CvRequestAction
+        match={match}
+        effectiveTier={effectiveTier}
+        existingRequest={cvRequest}
+        onRequested={onCvRequested}
+      />
     </div>
   );
 }
@@ -372,9 +456,15 @@ function MatchCard({ match }: { match: MatchResult }) {
 function MatchSection({
   matches,
   emptyMessage,
+  effectiveTier,
+  cvRequestsByOpportunity,
+  onCvRequested,
 }: {
   matches: MatchResult[];
   emptyMessage: string | null;
+  effectiveTier: EffectiveTier;
+  cvRequestsByOpportunity: Record<string, CvRequest>;
+  onCvRequested: (request: CvRequest) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -384,7 +474,13 @@ function MatchSection({
         </p>
       )}
       {matches.map((match) => (
-        <MatchCard key={match.opportunityId} match={match} />
+        <MatchCard
+          key={match.opportunityId}
+          match={match}
+          effectiveTier={effectiveTier}
+          cvRequest={cvRequestsByOpportunity[match.opportunityId]}
+          onCvRequested={onCvRequested}
+        />
       ))}
     </div>
   );
@@ -446,6 +542,15 @@ function MatchesPageContent() {
     // Verified* equivalent — so "check back soon" is actively misleading;
     // only completing the assessment fixes it. Found live 2026-08-30 on a
     // real account in exactly this state.
+    // listMyCvRequests() is fetched separately, not folded into the
+    // Promise.all below — found live (2026-10-01): bundling it meant a
+    // failure there (e.g. a backend not yet restarted to pick up the new
+    // route) took down the entire matches page with a generic error, even
+    // though this is purely an enhancement to one button per card. Same
+    // "best-effort secondary fetch, never blocks the primary load" pattern
+    // account/page.tsx already uses for loadDocuments/loadMessages — a
+    // failure here just means the CV-request buttons start from a blank
+    // slate, not a broken page.
     Promise.all([fetchMyMatches(), getCurrentUser()])
       .then(([matchesResponse, user]) => {
         if (!cancelled) {
@@ -456,7 +561,18 @@ function MatchesPageContent() {
             effectiveTier: matchesResponse.effectiveTier,
             hasProfile: user?.hasProfile ?? false,
             stateBreakdown: matchesResponse.stateBreakdown,
+            cvRequests: [],
           });
+          listMyCvRequests()
+            .then((cvRequests) => {
+              if (!cancelled) {
+                setState((current) => (current.status === 'loaded' ? { ...current, cvRequests } : current));
+              }
+            })
+            .catch(() => {
+              // Non-critical — the page already loaded; CV-request buttons
+              // just start unrequested instead of reflecting prior state.
+            });
         }
       })
       .catch((error) => {
@@ -475,6 +591,19 @@ function MatchesPageContent() {
     await logout();
     setState({ status: 'not-signed-in' });
   };
+
+  const handleCvRequested = (request: CvRequest) => {
+    setState((current) => {
+      if (current.status !== 'loaded') return current;
+      const withoutDuplicate = current.cvRequests.filter((r) => r.opportunityId !== request.opportunityId);
+      return { ...current, cvRequests: [...withoutDuplicate, request] };
+    });
+  };
+
+  const cvRequestsByOpportunity: Record<string, CvRequest> =
+    state.status === 'loaded'
+      ? Object.fromEntries(state.cvRequests.map((request) => [request.opportunityId, request]))
+      : {};
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -582,7 +711,13 @@ function MatchesPageContent() {
                   </div>
                   <div className="mt-6 space-y-4">
                     {state.matches.map((match) => (
-                      <MatchCard key={match.opportunityId} match={match} />
+                      <MatchCard
+                        key={match.opportunityId}
+                        match={match}
+                        effectiveTier={state.effectiveTier}
+                        cvRequest={cvRequestsByOpportunity[match.opportunityId]}
+                        onCvRequested={handleCvRequested}
+                      />
                     ))}
                     {Array.from({ length: state.blurredCount }).map((_, index) => (
                       <BlurredMatchCard key={index} variant={index} />
@@ -618,15 +753,29 @@ function MatchesPageContent() {
                   <MatchSection
                     matches={state.matches.filter((match) => match.path === 'Ausbildung')}
                     emptyMessage="No matching Ausbildung opportunities yet — check back soon as more real opportunities are added."
+                    effectiveTier={state.effectiveTier}
+                    cvRequestsByOpportunity={cvRequestsByOpportunity}
+                    onCvRequested={handleCvRequested}
                   />
                 )}
                 {activeTab === 'University' && (
                   <MatchSection
                     matches={state.matches.filter((match) => match.path === 'University')}
                     emptyMessage="No matching university opportunities yet — check back soon as more real opportunities are added."
+                    effectiveTier={state.effectiveTier}
+                    cvRequestsByOpportunity={cvRequestsByOpportunity}
+                    onCvRequested={handleCvRequested}
                   />
                 )}
-                {activeTab === 'Work' && <MatchSection matches={[]} emptyMessage={null} />}
+                {activeTab === 'Work' && (
+                  <MatchSection
+                    matches={[]}
+                    emptyMessage={null}
+                    effectiveTier={state.effectiveTier}
+                    cvRequestsByOpportunity={cvRequestsByOpportunity}
+                    onCvRequested={handleCvRequested}
+                  />
+                )}
               </div>
             </>
           )}

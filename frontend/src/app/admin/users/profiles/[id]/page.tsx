@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   AdminUnauthorizedError,
   deleteUser,
+  fetchMessageAttachmentUrl,
   getUserDetail,
   recomputeVerifiedData,
   reviewDocument,
@@ -13,6 +14,8 @@ import {
 } from '@/lib/api/admin-users';
 import type { AdminDocument, AdminPurchase, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
 import type { Message } from '@/lib/contracts/messages';
+import type { IntakeProfile, IntakeStatus } from '@/lib/contracts/intake';
+import { openInNewTabAfterFetch } from '@/lib/open-in-new-tab';
 import { useAdminKey } from '@/hooks/useAdminKey';
 import { useAdminLiveMessages } from '@/hooks/useAdminLiveMessages';
 import { useAdminReplyNotifications } from '@/hooks/useAdminReplyNotifications';
@@ -261,7 +264,15 @@ function DocumentCard({
 // a message the user wrote themselves. Not yet live-pushed to this page
 // (see MessagesHub.cs's comment); a reply appears on the next manual
 // refresh.
-function MessageHistorySection({ messages }: { messages: Message[] }) {
+function MessageHistorySection({
+  messages,
+  adminKey,
+  userId,
+}: {
+  messages: Message[];
+  adminKey: string;
+  userId: string;
+}) {
   return (
     <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
       <h2 className="text-sm font-semibold text-slate-900">Message history</h2>
@@ -300,11 +311,66 @@ function MessageHistorySection({ messages }: { messages: Message[] }) {
                 </div>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{message.body}</p>
+              {message.hasAttachment && (
+                <AdminAttachmentDownloadButton
+                  adminKey={adminKey}
+                  userId={userId}
+                  messageId={message.id}
+                  fileName={message.attachmentFileName}
+                />
+              )}
             </div>
           ))
         )}
       </div>
     </section>
+  );
+}
+
+// Lets the founder re-download exactly what was sent to a user, e.g. to
+// double-check a CV delivery. Can't be a plain <a href> — the admin-key
+// header has no equivalent on a navigation — so this opens a blank tab
+// synchronously on click, then redirects it once the SAS URL resolves (see
+// openInNewTabAfterFetch's comment for why: a bare window.open() after the
+// await gets silently popup-blocked in real browsers).
+function AdminAttachmentDownloadButton({
+  adminKey,
+  userId,
+  messageId,
+  fileName,
+}: {
+  adminKey: string;
+  userId: string;
+  messageId: string;
+  fileName: string | null;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await openInNewTabAfterFetch(() => fetchMessageAttachmentUrl(adminKey, userId, messageId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 flex items-center gap-2 border-t border-slate-200/70 pt-3">
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {loading ? 'Opening…' : `⬇ Download${fileName ? ` ${fileName}` : ''}`}
+      </button>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
 
@@ -591,6 +657,126 @@ function DataConsistencySection({ user }: { user: AdminUserDetail }) {
           </div>
         )}
       </div>
+    </section>
+  );
+}
+
+const INTAKE_STATUS_LABELS: Record<IntakeStatus, string> = {
+  NotStarted: 'Not started',
+  InProgress: 'In progress',
+  Submitted: 'Submitted for review',
+};
+
+// Closes a real gap found live 2026-10-01: a Tier2+ CV request showed up in
+// the admin queue with no way to see the actual intake content (work
+// history, education, skills) it's meant to be built from, anywhere in the
+// admin UI — this was the missing link between "a request came in" and
+// "here's what to actually write." Photo preview isn't included yet (no
+// admin-facing SAS-URL endpoint for it exists) — a known, non-blocking gap,
+// since the text content here is what a CV is actually built from.
+function IntakeSection({ intake }: { intake: IntakeProfile | null }) {
+  if (!intake) {
+    return (
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+        <h2 className="text-sm font-semibold text-slate-900">CV profile (Tier 2 intake)</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          This user hasn&apos;t started their CV intake profile yet.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-slate-900">CV profile (Tier 2 intake)</h2>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+          {INTAKE_STATUS_LABELS[intake.status]}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        What this user entered for CV generation — the actual content a CV/cover letter request
+        should be built from.
+      </p>
+
+      <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-700 sm:grid-cols-2">
+        {intake.phoneNumber && (
+          <div><dt className="inline font-semibold">Phone: </dt><dd className="inline">{intake.phoneNumber}</dd></div>
+        )}
+        {intake.address && (
+          <div><dt className="inline font-semibold">Address: </dt><dd className="inline">{intake.address}</dd></div>
+        )}
+        {intake.dateOfBirth && (
+          <div><dt className="inline font-semibold">Date of birth: </dt><dd className="inline">{intake.dateOfBirth}</dd></div>
+        )}
+        <div><dt className="inline font-semibold">Photo: </dt><dd className="inline">{intake.hasPhoto ? 'Uploaded' : 'None'}</dd></div>
+        {intake.drivingLicence && (
+          <div><dt className="inline font-semibold">Driving licence: </dt><dd className="inline">Yes</dd></div>
+        )}
+        {intake.technicalSkills && (
+          <div className="sm:col-span-2"><dt className="inline font-semibold">Skills: </dt><dd className="inline">{intake.technicalSkills}</dd></div>
+        )}
+        {intake.certifications && (
+          <div className="sm:col-span-2"><dt className="inline font-semibold">Certifications: </dt><dd className="inline">{intake.certifications}</dd></div>
+        )}
+        {intake.hobbies && (
+          <div className="sm:col-span-2"><dt className="inline font-semibold">Hobbies: </dt><dd className="inline">{intake.hobbies}</dd></div>
+        )}
+      </dl>
+
+      {intake.summary && (
+        <div className="mt-3 rounded-2xl bg-slate-50 p-3">
+          <p className="text-xs font-semibold text-slate-700">Summary</p>
+          <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">{intake.summary}</p>
+        </div>
+      )}
+
+      {intake.experience.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-slate-700">Experience</p>
+          <div className="mt-2 space-y-2">
+            {intake.experience.map((entry, i) => (
+              <div key={i} className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
+                <p className="font-semibold text-slate-800">
+                  {entry.title} — {entry.employer}
+                  {entry.location ? `, ${entry.location}` : ''}
+                </p>
+                <p className="mt-0.5 text-slate-500">
+                  {entry.startDate ?? '?'} – {entry.endDate ?? 'present'}
+                </p>
+                {entry.bullets.length > 0 && (
+                  <ul className="mt-1 list-disc pl-4">
+                    {entry.bullets.map((bullet, bi) => (
+                      <li key={bi}>{bullet}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {intake.education.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-slate-700">Education</p>
+          <div className="mt-2 space-y-2">
+            {intake.education.map((entry, i) => (
+              <div key={i} className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
+                <p className="font-semibold text-slate-800">
+                  {entry.qualification} — {entry.institution}
+                </p>
+                <p className="mt-0.5 text-slate-500">
+                  {[entry.fieldOfStudy, entry.city].filter(Boolean).join(', ')}
+                  {(entry.startDate || entry.endDate) &&
+                    ` · ${entry.startDate ?? '?'} – ${entry.endDate ?? 'present'}`}
+                  {entry.grade && ` · Grade: ${entry.grade}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -903,6 +1089,8 @@ export default function AdminUserProfilePage() {
 
         <PurchasesSection effectiveTier={user.effectiveTier} purchases={user.purchases} />
 
+        <IntakeSection intake={user.intake} />
+
         <DataConsistencySection user={user} />
 
         <section className="mt-6">
@@ -918,7 +1106,7 @@ export default function AdminUserProfilePage() {
           </div>
         </section>
 
-        <MessageHistorySection messages={user.messages} />
+        <MessageHistorySection messages={user.messages} adminKey={adminKey} userId={userId} />
 
         <section className="mt-6">
           <MessageForm onSend={handleSendMessage} />

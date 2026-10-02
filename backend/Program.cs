@@ -11,6 +11,13 @@ using Novira.Backend.Endpoints;
 using Novira.Backend.Hubs;
 using Novira.Backend.Models;
 using Novira.Backend.Services;
+using QuestPDF.Infrastructure;
+
+// Community license — free at NOVIRA's current revenue scale (QuestPDF's
+// license is gated on the using organization's annual gross revenue, not
+// seats/usage). Worth revisiting only if that ever changes — see
+// Architecture.md's "Tier 2 services" PDF-rendering section.
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +44,7 @@ builder.Services.AddHttpClient<BundesagenturJobsucheClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(20);
 });
 builder.Services.AddScoped<UniversityResearchService>();
+builder.Services.AddScoped<CvGenerationService>();
 builder.Services.AddScoped<OpportunitySyncService>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -160,6 +168,10 @@ app.MapDocumentsAdminEndpoints();
 app.MapAccountEndpoints();
 app.MapMessagesEndpoints();
 app.MapPurchasesEndpoints();
+app.MapIntakeEndpoints();
+app.MapCvRequestsEndpoints();
+app.MapCvRequestsAdminEndpoints();
+app.MapCvReferenceSettingsAdminEndpoints();
 app.MapHub<MessagesHub>("/hubs/messages");
 
 app.MapPost("/leads", async (

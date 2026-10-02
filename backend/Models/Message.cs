@@ -34,4 +34,15 @@ public class Message
     public DateTime? ReadAt { get; set; }
 
     public MessageSender Sender { get; set; } = MessageSender.Admin;
+
+    // A real file attachment (built 2026-10-02, closing the gap where
+    // "Mark delivered" on a CV request was a pure status flag with no way
+    // to actually get the finished CV/cover letter to the user — found live
+    // by the founder: the match card promised "check your messages" and
+    // there was genuinely nothing there). Same private-blob/SAS-URI-on-read
+    // pattern as UserDocument/IntakeProfile's photo — never a permanent
+    // public link. Null for every message that isn't a file delivery.
+    public string? AttachmentBlobName { get; set; }
+    public string? AttachmentFileName { get; set; }
+    public string? AttachmentContentType { get; set; }
 }

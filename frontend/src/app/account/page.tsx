@@ -8,9 +8,11 @@ import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
 import { listMyMessages, markAllMessagesRead, sendMyMessage } from '@/lib/api/messages';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
+import { fetchMyIntake } from '@/lib/api/intake';
 import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
 import type { Message } from '@/lib/contracts/messages';
+import type { IntakeStatus } from '@/lib/contracts/intake';
 import type { PurchaseTier } from '@/lib/contracts/purchases';
 import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 import { Tier2UpsellCard } from '@/components/tier2-upsell';
@@ -162,6 +164,45 @@ function VerifiedSection({ account }: { account: Account }) {
           </div>
         ))}
       </dl>
+    </section>
+  );
+}
+
+const INTAKE_STATUS_LABELS: Record<IntakeStatus, string> = {
+  NotStarted: 'Not started yet',
+  InProgress: "In progress — pick up where you left off",
+  Submitted: 'Submitted for review',
+};
+
+// Promoted to a real card near the top of the page (2026-10-01) — was a
+// small text link at the bottom, which the founder correctly flagged as
+// easy to miss and a poor way to advertise a real feature. `status` is
+// fetched best-effort alongside the rest of the page; a `null` (fetch
+// failed, or hasn't resolved yet) still renders the card with the
+// not-started copy rather than hiding it, since the link itself works
+// regardless of whether the status fetch succeeded.
+function CvProfileSection({ status }: { status: IntakeStatus | null }) {
+  const effectiveStatus = status ?? 'NotStarted';
+  return (
+    <section className="rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-emerald-900">CV profile</h2>
+          <p className="mt-1 text-sm leading-6 text-emerald-800">
+            Your work history, education detail, and skills — filled in once, used to build a
+            tailored CV whenever you request one for a specific match.
+          </p>
+          <p className="mt-2 text-xs font-semibold text-emerald-700">
+            Status: {INTAKE_STATUS_LABELS[effectiveStatus]}
+          </p>
+        </div>
+        <Link
+          href="/account/intake"
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-emerald-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+        >
+          {effectiveStatus === 'NotStarted' ? 'Build your CV profile' : 'Edit your CV profile'}
+        </Link>
+      </div>
     </section>
   );
 }
@@ -394,6 +435,9 @@ function MessagesSection({
                 <p className="shrink-0 text-xs text-slate-400">{formatMessageDateTime(message.createdAt)}</p>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{message.body}</p>
+              {message.hasAttachment && (
+                <AttachmentDownloadButton messageId={message.id} fileName={message.attachmentFileName} />
+              )}
             </div>
           ))
         )}
@@ -421,6 +465,29 @@ function MessagesSection({
         </form>
       )}
     </section>
+  );
+}
+
+// A plain navigation, not a JS fetch-then-window.open() — found live
+// 2026-10-02: a real browser's popup blocker silently swallowed
+// window.open() called after an awaited fetch (Playwright's own default
+// context doesn't enforce that, which is why this passed automated
+// verification but failed for a real user). The route itself is a cookie-
+// authenticated 302 straight to a fresh SAS URL (see the route's comment),
+// so a real anchor click sidesteps the whole class of problem — the browser
+// treats it as a genuine user-initiated navigation.
+function AttachmentDownloadButton({ messageId, fileName }: { messageId: string; fileName: string | null }) {
+  return (
+    <div className="mt-3 flex items-center gap-2 border-t border-slate-200/70 pt-3">
+      <a
+        href={`/api/messages/${messageId}/attachment`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+      >
+        {`⬇ Download${fileName ? ` ${fileName}` : ''}`}
+      </a>
+    </div>
   );
 }
 
@@ -543,6 +610,7 @@ export default function AccountPage() {
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const [documents, setDocuments] = useState<UserDocumentSummary[] | null>(null);
   const [messages, setMessages] = useState<Message[] | null>(null);
+  const [intakeStatus, setIntakeStatus] = useState<IntakeStatus | null>(null);
   const [justUpdated, setJustUpdated] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState<{ text: string; isError: boolean } | null>(
     null
@@ -574,17 +642,29 @@ export default function AccountPage() {
       });
   }, []);
 
+  const loadIntakeStatus = useCallback(() => {
+    fetchMyIntake()
+      .then((response) => setIntakeStatus(response.profile?.status ?? 'NotStarted'))
+      .catch(() => {
+        // Best-effort, same reasoning as loadDocuments/loadMessages above —
+        // CvProfileSection just falls back to its default "not started"
+        // copy rather than the page failing to load (the lesson from the
+        // /matches CV-requests bug found live 2026-10-01).
+      });
+  }, []);
+
   useEffect(() => {
     fetchMyAccount()
       .then((account) => {
         setState({ status: 'loaded', account });
         loadDocuments();
         loadMessages();
+        loadIntakeStatus();
       })
       .catch((error) => {
         setState({ status: error instanceof NoAccountSession ? 'not-signed-in' : 'error' });
       });
-  }, [loadDocuments, loadMessages]);
+  }, [loadDocuments, loadMessages, loadIntakeStatus]);
 
   // Landed here from /assessment/edit's redirectTo="/account?updated=1" —
   // read directly off window.location rather than useSearchParams() to
@@ -748,6 +828,7 @@ export default function AccountPage() {
             <>
               {!state.account.profileUpdatedAt && <NoProfileBanner />}
               <PlanSection effectiveTier={state.account.effectiveTier} />
+              <CvProfileSection status={intakeStatus} />
               <ProfileSection account={state.account} />
               <VerifiedSection account={state.account} />
               <DocumentsSection documents={documents} onUploaded={loadDocuments} />
@@ -757,7 +838,7 @@ export default function AccountPage() {
                 onSent={(message) => setMessages((current) => [message, ...(current ?? [])])}
               />
               <div className="pt-2">
-                <Link href="/matches" className="text-sm text-emerald-700 underline underline-offset-2">
+                <Link href="/matches" className="block text-sm text-emerald-700 underline underline-offset-2">
                   View my matching opportunities →
                 </Link>
               </div>

@@ -12,6 +12,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserDocument> UserDocuments => Set<UserDocument>();
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<Purchase> Purchases => Set<Purchase>();
+    public DbSet<IntakeProfile> IntakeProfiles => Set<IntakeProfile>();
+    public DbSet<CvRequest> CvRequests => Set<CvRequest>();
+    public DbSet<CvReferenceSettings> CvReferenceSettings => Set<CvReferenceSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +60,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(p => p.UserId);
             entity.HasIndex(p => p.StripeSessionId).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // One row per user — enforced by a unique index, not just app-level
+        // convention, since GET/PUT /intake both assume FirstOrDefault finds
+        // at most one.
+        modelBuilder.Entity<IntakeProfile>(entity =>
+        {
+            entity.HasIndex(p => p.UserId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CvRequest>(entity =>
+        {
+            entity.HasIndex(r => r.UserId);
+            entity.HasOne<User>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict, not Cascade — there's no delete endpoint for
+            // Opportunity today, but a CvRequest is a historical record of
+            // what was asked for and should never be silently removed as a
+            // side effect of something else.
+            entity.HasOne<Opportunity>().WithMany().HasForeignKey(r => r.OpportunityId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
