@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export function Hero() {
   return (
-    <div className="hero rounded-4xl border border-white/10 bg-slate-950/95 px-6 py-10 text-white shadow-2xl shadow-emerald-950/20 backdrop-blur sm:px-10 lg:px-12">
+    <div className="hero rounded-4xl border border-white/10 bg-slate-950/95 px-6 py-10 text-red-500 shadow-2xl shadow-emerald-950/20 backdrop-blur sm:px-10 lg:px-12">
       <div className="hero-content w-full flex-col items-start gap-10 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl space-y-6">
           <div className="space-y-4">
