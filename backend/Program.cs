@@ -161,6 +161,7 @@ app.MapGet("/", () => Results.Ok(new
 
 app.MapOpportunitiesAdminEndpoints();
 app.MapMatchingEndpoints();
+app.MapMatchActivityEndpoints();
 app.MapOpportunityCountsEndpoints();
 app.MapAuthEndpoints();
 app.MapDocumentsEndpoints();

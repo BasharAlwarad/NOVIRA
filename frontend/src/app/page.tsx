@@ -1,7 +1,14 @@
 import { Hero } from '@/components/hero';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
+import { TIER1_PRICE_EUR, TIER2_PRICE_EUR } from '@/lib/tier-pricing';
 
+// Rewritten 2026-10-04 (point 1 of the UI/UX hardening pass) — the previous
+// copy here was generic "Study/Work/Information" placeholder text written
+// before any of the real product existed, and hadn't been touched since.
+// Now describes the actual three-tier funnel, and doubles as the "what do
+// I get at each level" explainer the nav's tier badge links to (point 2) —
+// one place for this, not two.
 export default async function Home() {
   return (
     <main
@@ -18,38 +25,40 @@ export default async function Home() {
         >
           <div className="space-y-3 rounded-3xl bg-slate-50 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Study
+              Free
             </p>
             <h2 className="text-xl font-bold text-slate-900">
-              Find the right study path
+              Find your pathway
             </h2>
             <p className="text-sm leading-6 text-slate-600">
-              NOVIRA helps people understand study options in Germany with
-              specialist guidance and clear information.
+              A free assessment gives you a personalized verdict — university,
+              Ausbildung, or work — plus one real matching opportunity, no
+              signup required.
             </p>
           </div>
           <div className="space-y-3 rounded-3xl bg-slate-50 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Work
+              Tier 1 — €{TIER1_PRICE_EUR}
             </p>
             <h2 className="text-xl font-bold text-slate-900">
-              Discover work opportunities
+              Unlock every match
             </h2>
             <p className="text-sm leading-6 text-slate-600">
-              We support job seekers with expert advice, practical next steps,
-              and AI-assisted search workflows.
+              See every real opportunity that fits your profile, with a
+              human review of your eligibility — not just the one free
+              match.
             </p>
           </div>
           <div className="space-y-3 rounded-3xl bg-slate-50 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Information
+              Tier 2 — €{TIER2_PRICE_EUR}
             </p>
             <h2 className="text-xl font-bold text-slate-900">
-              Get reliable details
+              Get application support
             </h2>
             <p className="text-sm leading-6 text-slate-600">
-              Our specialists and experts combine local knowledge in Germany
-              with AI to simplify complex decisions.
+              An AI-drafted CV and cover letter for any match, real-time chat
+              with our team, and a way to track what you&apos;ve applied to.
             </p>
           </div>
         </section>

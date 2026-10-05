@@ -21,11 +21,56 @@ export async function fetchMyAccount(): Promise<Account> {
   return (await response.json()) as Account;
 }
 
-export async function deleteMyAccount(): Promise<void> {
-  const response = await fetch('/api/account', { method: 'DELETE' });
+// The account-deletion cooling-off flow (built 2026-10-04) — replaces the
+// old one-click immediate delete. See Architecture.md's "UI/UX hardening
+// pass" for the full 8-step agreed flow.
+export async function requestAccountDeletion(reason: string | null): Promise<{ emailSent: boolean }> {
+  const response = await fetch('/api/account/delete-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+
+  if (response.status === 401) {
+    throw new NotSignedInError();
+  }
+  if (!response.ok) {
+    throw new Error('Failed to start account deletion.');
+  }
+
+  return (await response.json()) as { emailSent: boolean };
+}
+
+// Public — the token itself is the auth, same as verifyMagicLink. Not
+// session-gated: the email link could be opened in a different browser.
+export async function confirmAccountDeletion(
+  token: string,
+  typedConfirmation: string
+): Promise<{ scheduledFor: string }> {
+  const response = await fetch('/api/account/confirm-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, typedConfirmation }),
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
-    throw new Error('Failed to delete your account.');
+    throw new Error(data?.message ?? 'Failed to confirm account deletion.');
+  }
+
+  return data as { scheduledFor: string };
+}
+
+export async function cancelAccountDeletion(): Promise<void> {
+  const response = await fetch('/api/account/cancel-deletion', { method: 'POST' });
+
+  if (response.status === 401) {
+    throw new NotSignedInError();
+  }
+  if (!response.ok) {
+    throw new Error('Failed to cancel account deletion.');
   }
 }
 

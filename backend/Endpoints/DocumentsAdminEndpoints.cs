@@ -26,7 +26,12 @@ public record AdminUserListItem(
     // Added 2026-09-29: a paid user was otherwise invisible anywhere on the
     // admin side, with no way to tell Free and paying users apart at a
     // glance.
-    string EffectiveTier);
+    string EffectiveTier,
+    // Non-null while the account-deletion cooling-off window is active —
+    // see AccountEndpoints.cs. Lets the founder see (and, via the reason,
+    // understand) a pending departure before it's actually gone.
+    DateTime? DeletionScheduledFor,
+    string? DeletionReason);
 
 public record AdminPurchaseResponse(
     Guid Id,
@@ -133,7 +138,16 @@ public record AdminUserDetailResponse(
     // queue with no way to see the actual intake content it's supposed to
     // be built from, anywhere in the admin UI. Reuses
     // IntakeEndpoints.IntakeProfileResponse rather than a second copy.
-    IntakeProfileResponse? Intake);
+    IntakeProfileResponse? Intake,
+    // Matches this user has self-marked as applied (MatchActivityEndpoints.cs),
+    // newest first — the founder's first real signal of which matches
+    // actually turn into action, not just which ones were computed as a fit.
+    List<AdminAppliedMatchResponse> AppliedMatches,
+    DateTime? DeletionScheduledFor,
+    string? DeletionReason);
+
+public record AdminAppliedMatchResponse(
+    Guid OpportunityId, string OpportunityTitle, string OpportunityProvider, DateTime AppliedAt);
 
 public record ReviewDocumentRequest(DocumentReviewStatus Status, string? Note);
 public record SendMessageRequest(string Body);
@@ -148,8 +162,27 @@ public static class DocumentsAdminEndpoints
     {
         var group = app.MapGroup("/admin/users").AddEndpointFilter<AdminAuthFilter>();
 
-        group.MapGet("/", async (string? search, AppDbContext db) =>
+        group.MapGet("/", async (
+            string? search, AppDbContext db, AzureBlobStorageService storage, ILoggerFactory loggerFactory) =>
         {
+            // The bulk half of the account-deletion lazy sweep (the other
+            // half runs in AuthEndpoints.cs's /auth/verify, for whichever
+            // specific user signs back in) — this app has no scheduler, so
+            // an overdue account that the user themselves never revisits
+            // would otherwise linger forever. The admin user list is a
+            // natural, already-existing touchpoint to catch those instead.
+            var overdue = await db.Users
+                .Where(u => u.DeletionScheduledFor != null && u.DeletionScheduledFor <= DateTime.UtcNow)
+                .ToListAsync();
+            if (overdue.Count > 0)
+            {
+                var sweepLogger = loggerFactory.CreateLogger("AccountDeletionSweep");
+                foreach (var overdueUser in overdue)
+                {
+                    await AccountDeletionHelper.PermanentlyDeleteAsync(db, storage, sweepLogger, overdueUser);
+                }
+            }
+
             var query = db.Users.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -183,7 +216,8 @@ public static class DocumentsAdminEndpoints
                 .Select(u => new AdminUserListItem(
                     u.Id, u.Email, u.FullName, u.VerifiedFullName, u.FraudFlagged,
                     pendingCounts.GetValueOrDefault(u.Id, 0), u.CreatedAt,
-                    EffectiveTierCalculator.Compute(purchasesByUser.GetValueOrDefault(u.Id, [])).ToString()))
+                    EffectiveTierCalculator.Compute(purchasesByUser.GetValueOrDefault(u.Id, [])).ToString(),
+                    u.DeletionScheduledFor, u.DeletionReason))
                 .OrderByDescending(u => u.PendingDocumentCount > 0)
                 .ThenByDescending(u => u.PendingDocumentCount)
                 .ThenByDescending(u => u.CreatedAt)
@@ -207,8 +241,9 @@ public static class DocumentsAdminEndpoints
             var messages = await LoadMessagesAsync(db, id);
             var purchases = await LoadPurchasesAsync(db, id);
             var intake = await LoadIntakeProfileAsync(db, id);
+            var appliedMatches = await LoadAppliedMatchesAsync(db, id);
 
-            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake));
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake, appliedMatches));
         });
 
         group.MapPatch("/{userId:guid}/documents/{documentId:guid}", async (
@@ -316,8 +351,9 @@ public static class DocumentsAdminEndpoints
             var messages = await LoadMessagesAsync(db, id);
             var purchases = await LoadPurchasesAsync(db, id);
             var intake = await LoadIntakeProfileAsync(db, id);
+            var appliedMatches = await LoadAppliedMatchesAsync(db, id);
 
-            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake));
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake, appliedMatches));
         });
 
         // Admin-initiated full account deletion — the same real, complete
@@ -337,22 +373,24 @@ public static class DocumentsAdminEndpoints
                 return Results.NotFound();
             }
 
-            var logger = loggerFactory.CreateLogger("AdminUsers");
-
-            try
-            {
-                await storage.DeleteAllForUserAsync(user.Id);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to delete blob storage files for user {UserId} during admin-initiated account deletion.", user.Id);
-            }
-
-            db.Users.Remove(user);
-            await db.SaveChangesAsync();
+            await AccountDeletionHelper.PermanentlyDeleteAsync(
+                db, storage, loggerFactory.CreateLogger("AdminUsers"), user);
 
             return Results.NoContent();
         });
+
+        // The durable "why did people leave" record — survives the
+        // accounts themselves (AccountDeletionLog has no FK to User by
+        // design, see its own comment). The actual payoff of asking for a
+        // reason during the deletion flow, not something quietly discarded
+        // once the account vanishes 7 days later.
+        app.MapGet("/admin/deletion-log", async (AppDbContext db) =>
+        {
+            var log = await db.AccountDeletionLogs
+                .OrderByDescending(l => l.DeletedAt)
+                .ToListAsync();
+            return Results.Ok(log);
+        }).AddEndpointFilter<AdminAuthFilter>();
 
         // The general-purpose, free-text escape hatch — not tied to any one
         // document, for anything the fixed Approve/Deny/FlagRed actions
@@ -394,7 +432,7 @@ public static class DocumentsAdminEndpoints
 
     private static AdminUserDetailResponse ToAdminUserDetailResponse(
         User user, List<UserDocument> documents, List<Message> messages, List<Purchase> purchases,
-        AzureBlobStorageService storage, IntakeProfile? intake) =>
+        AzureBlobStorageService storage, IntakeProfile? intake, List<AdminAppliedMatchResponse> appliedMatches) =>
         new(
             user.Id, user.Email, user.FullName, user.CreatedAt,
             user.FraudFlagged, user.FraudFlaggedAt, user.FraudFlagNote,
@@ -413,7 +451,9 @@ public static class DocumentsAdminEndpoints
                 p.Id, p.Tier.ToString(), p.AmountEur, p.Status.ToString(), p.CreatedAt, p.RefundedAt)).ToList(),
             documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
             messages.Select(MessagesEndpoints.ToResponse).ToList(),
-            intake is null ? null : IntakeEndpoints.ToResponse(intake));
+            intake is null ? null : IntakeEndpoints.ToResponse(intake),
+            appliedMatches,
+            user.DeletionScheduledFor, user.DeletionReason);
 
     private static Task<List<Message>> LoadMessagesAsync(AppDbContext db, Guid userId) =>
         db.Messages.Where(m => m.UserId == userId).OrderByDescending(m => m.CreatedAt).ToListAsync();
@@ -423,6 +463,31 @@ public static class DocumentsAdminEndpoints
 
     private static Task<IntakeProfile?> LoadIntakeProfileAsync(AppDbContext db, Guid userId) =>
         db.IntakeProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+
+    // Joined against Opportunities here (rather than in MatchActivityEndpoints,
+    // which only ever needs the OpportunityId for the signed-in user's own
+    // view) since the admin view is the one place title/provider actually
+    // need to be shown alongside the activity.
+    private static async Task<List<AdminAppliedMatchResponse>> LoadAppliedMatchesAsync(AppDbContext db, Guid userId)
+    {
+        var activity = await db.MatchActivities
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.AppliedAt)
+            .ToListAsync();
+
+        var opportunityIds = activity.Select(a => a.OpportunityId).ToList();
+        var opportunities = await db.Opportunities
+            .Where(o => opportunityIds.Contains(o.Id))
+            .ToDictionaryAsync(o => o.Id);
+
+        return activity
+            .Select(a => opportunities.TryGetValue(a.OpportunityId, out var opportunity)
+                ? new AdminAppliedMatchResponse(a.OpportunityId, opportunity.Title, opportunity.Provider, a.AppliedAt)
+                : null)
+            .Where(r => r is not null)
+            .Select(r => r!)
+            .ToList();
+    }
 
     // allDocuments, when provided, resolves SupersedesDocumentName from the
     // same set already being built (list/detail views) — no extra query.

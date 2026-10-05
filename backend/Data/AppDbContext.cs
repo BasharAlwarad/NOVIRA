@@ -15,6 +15,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<IntakeProfile> IntakeProfiles => Set<IntakeProfile>();
     public DbSet<CvRequest> CvRequests => Set<CvRequest>();
     public DbSet<CvReferenceSettings> CvReferenceSettings => Set<CvReferenceSettings>();
+    public DbSet<MatchActivity> MatchActivities => Set<MatchActivity>();
+    public DbSet<AccountDeletionToken> AccountDeletionTokens => Set<AccountDeletionToken>();
+    public DbSet<AccountDeletionLog> AccountDeletionLogs => Set<AccountDeletionLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -81,5 +84,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // side effect of something else.
             entity.HasOne<Opportunity>().WithMany().HasForeignKey(r => r.OpportunityId).OnDelete(DeleteBehavior.Restrict);
         });
+
+        // One row per (user, opportunity) they've marked applied — enforced
+        // by a unique index so POST /matches/{id}/applied can safely
+        // "create or return existing" without a race producing duplicates.
+        modelBuilder.Entity<MatchActivity>(entity =>
+        {
+            entity.HasIndex(a => new { a.UserId, a.OpportunityId }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict, same reasoning as CvRequest's FK above — no delete
+            // endpoint for Opportunity today, but this shouldn't silently
+            // vanish as a side effect of something else.
+            entity.HasOne<Opportunity>().WithMany().HasForeignKey(a => a.OpportunityId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AccountDeletionToken>(entity =>
+        {
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // No FK to User — AccountDeletionLog is deliberately independent,
+        // see its own comment for why (it must outlive the row it's about).
     }
 }

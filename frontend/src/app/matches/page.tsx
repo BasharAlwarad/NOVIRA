@@ -4,11 +4,13 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { getCurrentUser, logout } from '@/lib/api/auth';
+import { getCurrentUser } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
 import { listMyCvRequests, requestCv } from '@/lib/api/cv-requests';
+import { listMyMatchActivity, markMatchApplied, unmarkMatchApplied } from '@/lib/api/match-activity';
 import type { MatchResult, StateCount } from '@/lib/contracts/matches';
 import type { CvRequest, CvRequestStatus } from '@/lib/contracts/cv-requests';
+import type { MatchActivity } from '@/lib/contracts/match-activity';
 import type { EffectiveTier } from '@/lib/contracts/account';
 import {
   APPLICATION_HELP_PRICE_EUR,
@@ -32,6 +34,7 @@ type PageState =
       hasProfile: boolean;
       stateBreakdown: StateCount[];
       cvRequests: CvRequest[];
+      matchActivity: MatchActivity[];
     };
 
 // Five differently-shaped placeholder cards, mixed rather than repeated
@@ -187,6 +190,66 @@ function formatFullDate(dateString: string): string {
     year: 'numeric',
     timeZone: 'UTC',
   });
+}
+
+// "New" highlight (point 12 of the 2026-10-04 UI/UX hardening pass) — based
+// on reviewedAt (when it became visible to users), not createdAt (when it
+// was first synced, possibly while still Pending) — see MatchResult's own
+// comment on the backend for why that distinction matters. 7 days is a
+// judgment call, not researched further than "roughly a week of browsing
+// feels current" — easy to retune later if it doesn't hold up in practice.
+const NEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isNewMatch(match: MatchResult): boolean {
+  if (!match.reviewedAt) return false;
+  return Date.now() - new Date(match.reviewedAt).getTime() < NEW_WINDOW_MS;
+}
+
+// A single select, not filter chips — found while discussing this: the
+// founder's own instinct after thinking it through was one dropdown over
+// separate buttons, and these five states are meant to be mutually
+// exclusive views (not combinable facets), which a select models more
+// honestly than chips would.
+type StatusFilter = 'All' | 'New' | 'Applied' | 'CvRequested' | 'NoCvRequested';
+const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
+  All: 'All',
+  New: 'New',
+  Applied: "I've applied",
+  CvRequested: 'CV requested',
+  NoCvRequested: 'No CV requested yet',
+};
+
+// Filters by the selected status, then — regardless of filter, since it's a
+// harmless no-op once everything shown already shares one status — sorts
+// not-yet-applied matches first. That ordering (not a hidden-by-default
+// filter) is what the founder actually asked for: "show first things the
+// user did not apply to first," not "hide what they've applied to."
+function filterAndSortMatches(
+  matches: MatchResult[],
+  statusFilter: StatusFilter,
+  cvRequestsByOpportunity: Record<string, CvRequest>,
+  matchActivityByOpportunity: Record<string, MatchActivity>
+): MatchResult[] {
+  const filtered = matches.filter((match) => {
+    switch (statusFilter) {
+      case 'All':
+        return true;
+      case 'New':
+        return isNewMatch(match);
+      case 'Applied':
+        return Boolean(matchActivityByOpportunity[match.opportunityId]);
+      case 'CvRequested':
+        return Boolean(cvRequestsByOpportunity[match.opportunityId]);
+      case 'NoCvRequested':
+        return !cvRequestsByOpportunity[match.opportunityId];
+    }
+  });
+
+  // A stable partition, not a re-sort by any other key — preserves the
+  // backend's own fit-score ordering within each group.
+  const notApplied = filtered.filter((match) => !matchActivityByOpportunity[match.opportunityId]);
+  const applied = filtered.filter((match) => matchActivityByOpportunity[match.opportunityId]);
+  return [...notApplied, ...applied];
 }
 
 // Real Opportunity fields (tuition/compensation/dates/description/source),
@@ -357,16 +420,100 @@ function CvRequestAction({
   );
 }
 
+// The "mark as applied" tracker — unlike CvRequestAction, available to every
+// tier (self-tracking isn't a paid feature) and not tied to having
+// requested a CV: most real applications (University, most Ausbildung)
+// don't need that help at all. Deliberately a single applied/not-applied
+// state with a timestamp, no multi-stage pipeline — research behind this
+// (dedicated job trackers like Teal/Huntr) found richer pipelines get
+// abandoned, and NOVIRA has no visibility into interview/offer outcomes
+// anyway, since those happen directly between the user and the employer.
+function MarkAppliedAction({
+  match,
+  activity,
+  onChanged,
+}: {
+  match: MatchResult;
+  activity: MatchActivity | undefined;
+  onChanged: (opportunityId: string, activity: MatchActivity | null) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleMark = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await markMatchApplied(match.opportunityId);
+      onChanged(match.opportunityId, result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark this as applied.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await unmarkMatchApplied(match.opportunityId);
+      onChanged(match.opportunityId, null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to undo that.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (activity) {
+    return (
+      <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4">
+        <p className="text-xs font-semibold text-emerald-700">
+          ✓ Applied on {formatFullDate(activity.appliedAt)}
+        </p>
+        <button
+          type="button"
+          onClick={handleUndo}
+          disabled={busy}
+          className="text-xs text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline disabled:cursor-not-allowed"
+        >
+          Undo
+        </button>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <button
+        type="button"
+        onClick={handleMark}
+        disabled={busy}
+        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? 'Saving…' : "I've applied to this"}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 function MatchCard({
   match,
   effectiveTier,
   cvRequest,
   onCvRequested,
+  matchActivity,
+  onMatchActivityChanged,
 }: {
   match: MatchResult;
   effectiveTier: EffectiveTier;
   cvRequest: CvRequest | undefined;
   onCvRequested: (request: CvRequest) => void;
+  matchActivity: MatchActivity | undefined;
+  onMatchActivityChanged: (opportunityId: string, activity: MatchActivity | null) => void;
 }) {
   const details = buildMatchDetails(match);
 
@@ -385,11 +532,18 @@ function MatchCard({
             {match.location ? ` — ${match.location}` : ''}
           </p>
         </div>
-        <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${FIT_STYLES[match.fitLabel] ?? 'bg-slate-100 text-slate-600'}`}
-        >
-          {match.fitLabel}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {isNewMatch(match) && (
+            <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+              New
+            </span>
+          )}
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${FIT_STYLES[match.fitLabel] ?? 'bg-slate-100 text-slate-600'}`}
+          >
+            {match.fitLabel}
+          </span>
+        </div>
       </div>
 
       {details.length > 0 && (
@@ -441,6 +595,7 @@ function MatchCard({
         existingRequest={cvRequest}
         onRequested={onCvRequested}
       />
+      <MarkAppliedAction match={match} activity={matchActivity} onChanged={onMatchActivityChanged} />
     </div>
   );
 }
@@ -459,12 +614,16 @@ function MatchSection({
   effectiveTier,
   cvRequestsByOpportunity,
   onCvRequested,
+  matchActivityByOpportunity,
+  onMatchActivityChanged,
 }: {
   matches: MatchResult[];
   emptyMessage: string | null;
   effectiveTier: EffectiveTier;
   cvRequestsByOpportunity: Record<string, CvRequest>;
   onCvRequested: (request: CvRequest) => void;
+  matchActivityByOpportunity: Record<string, MatchActivity>;
+  onMatchActivityChanged: (opportunityId: string, activity: MatchActivity | null) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -480,6 +639,8 @@ function MatchSection({
           effectiveTier={effectiveTier}
           cvRequest={cvRequestsByOpportunity[match.opportunityId]}
           onCvRequested={onCvRequested}
+          matchActivity={matchActivityByOpportunity[match.opportunityId]}
+          onMatchActivityChanged={onMatchActivityChanged}
         />
       ))}
     </div>
@@ -524,6 +685,7 @@ function SectionTabs({ counts }: { counts: Record<MatchTab, number> }) {
 
 function MatchesPageContent() {
   const [state, setState] = useState<PageState>({ status: 'loading' });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const searchParams = useSearchParams();
   const activeTab = (searchParams.get('section') as MatchTab | null) ?? 'Ausbildung';
 
@@ -562,6 +724,7 @@ function MatchesPageContent() {
             hasProfile: user?.hasProfile ?? false,
             stateBreakdown: matchesResponse.stateBreakdown,
             cvRequests: [],
+            matchActivity: [],
           });
           listMyCvRequests()
             .then((cvRequests) => {
@@ -572,6 +735,19 @@ function MatchesPageContent() {
             .catch(() => {
               // Non-critical — the page already loaded; CV-request buttons
               // just start unrequested instead of reflecting prior state.
+            });
+          // Same non-blocking, independently-caught pattern as the
+          // CV-requests fetch above — a failure here just means the
+          // "mark as applied" buttons start unmarked instead of reflecting
+          // prior state, not a broken page.
+          listMyMatchActivity()
+            .then((matchActivity) => {
+              if (!cancelled) {
+                setState((current) => (current.status === 'loaded' ? { ...current, matchActivity } : current));
+              }
+            })
+            .catch(() => {
+              // Non-critical — see comment above.
             });
         }
       })
@@ -587,11 +763,6 @@ function MatchesPageContent() {
     };
   }, []);
 
-  const handleLogout = async () => {
-    await logout();
-    setState({ status: 'not-signed-in' });
-  };
-
   const handleCvRequested = (request: CvRequest) => {
     setState((current) => {
       if (current.status !== 'loaded') return current;
@@ -600,9 +771,25 @@ function MatchesPageContent() {
     });
   };
 
+  const handleMatchActivityChanged = (opportunityId: string, activity: MatchActivity | null) => {
+    setState((current) => {
+      if (current.status !== 'loaded') return current;
+      const withoutExisting = current.matchActivity.filter((a) => a.opportunityId !== opportunityId);
+      return {
+        ...current,
+        matchActivity: activity ? [...withoutExisting, activity] : withoutExisting,
+      };
+    });
+  };
+
   const cvRequestsByOpportunity: Record<string, CvRequest> =
     state.status === 'loaded'
       ? Object.fromEntries(state.cvRequests.map((request) => [request.opportunityId, request]))
+      : {};
+
+  const matchActivityByOpportunity: Record<string, MatchActivity> =
+    state.status === 'loaded'
+      ? Object.fromEntries(state.matchActivity.map((activity) => [activity.opportunityId, activity]))
       : {};
 
   return (
@@ -626,15 +813,6 @@ function MatchesPageContent() {
               );
             })()}
           </div>
-          {state.status === 'loaded' && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="mt-1 text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
-            >
-              Sign out
-            </button>
-          )}
         </div>
 
         <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -717,6 +895,8 @@ function MatchesPageContent() {
                         effectiveTier={state.effectiveTier}
                         cvRequest={cvRequestsByOpportunity[match.opportunityId]}
                         onCvRequested={handleCvRequested}
+                        matchActivity={matchActivityByOpportunity[match.opportunityId]}
+                        onMatchActivityChanged={handleMatchActivityChanged}
                       />
                     ))}
                     {Array.from({ length: state.blurredCount }).map((_, index) => (
@@ -740,31 +920,61 @@ function MatchesPageContent() {
                 <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
               </div>
 
-              <SectionTabs
-                counts={{
-                  Ausbildung: state.matches.filter((match) => match.path === 'Ausbildung').length,
-                  University: state.matches.filter((match) => match.path === 'University').length,
-                  Work: 0,
-                }}
-              />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <SectionTabs
+                  counts={{
+                    Ausbildung: state.matches.filter((match) => match.path === 'Ausbildung').length,
+                    University: state.matches.filter((match) => match.path === 'University').length,
+                    Work: 0,
+                  }}
+                />
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                  Show
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+                  >
+                    {(Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((option) => (
+                      <option key={option} value={option}>
+                        {STATUS_FILTER_LABELS[option]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
               <div className="mt-6">
                 {activeTab === 'Ausbildung' && (
                   <MatchSection
-                    matches={state.matches.filter((match) => match.path === 'Ausbildung')}
+                    matches={filterAndSortMatches(
+                      state.matches.filter((match) => match.path === 'Ausbildung'),
+                      statusFilter,
+                      cvRequestsByOpportunity,
+                      matchActivityByOpportunity
+                    )}
                     emptyMessage="No matching Ausbildung opportunities yet — check back soon as more real opportunities are added."
                     effectiveTier={state.effectiveTier}
                     cvRequestsByOpportunity={cvRequestsByOpportunity}
                     onCvRequested={handleCvRequested}
+                    matchActivityByOpportunity={matchActivityByOpportunity}
+                    onMatchActivityChanged={handleMatchActivityChanged}
                   />
                 )}
                 {activeTab === 'University' && (
                   <MatchSection
-                    matches={state.matches.filter((match) => match.path === 'University')}
+                    matches={filterAndSortMatches(
+                      state.matches.filter((match) => match.path === 'University'),
+                      statusFilter,
+                      cvRequestsByOpportunity,
+                      matchActivityByOpportunity
+                    )}
                     emptyMessage="No matching university opportunities yet — check back soon as more real opportunities are added."
                     effectiveTier={state.effectiveTier}
                     cvRequestsByOpportunity={cvRequestsByOpportunity}
                     onCvRequested={handleCvRequested}
+                    matchActivityByOpportunity={matchActivityByOpportunity}
+                    onMatchActivityChanged={handleMatchActivityChanged}
                   />
                 )}
                 {activeTab === 'Work' && (
@@ -774,6 +984,8 @@ function MatchesPageContent() {
                     effectiveTier={state.effectiveTier}
                     cvRequestsByOpportunity={cvRequestsByOpportunity}
                     onCvRequested={handleCvRequested}
+                    matchActivityByOpportunity={matchActivityByOpportunity}
+                    onMatchActivityChanged={handleMatchActivityChanged}
                   />
                 )}
               </div>

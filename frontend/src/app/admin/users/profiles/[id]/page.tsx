@@ -12,7 +12,7 @@ import {
   reviewDocument,
   sendMessageToUser,
 } from '@/lib/api/admin-users';
-import type { AdminDocument, AdminPurchase, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
+import type { AdminAppliedMatch, AdminDocument, AdminPurchase, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
 import type { Message } from '@/lib/contracts/messages';
 import type { IntakeProfile, IntakeStatus } from '@/lib/contracts/intake';
 import { openInNewTabAfterFetch } from '@/lib/open-in-new-tab';
@@ -781,6 +781,37 @@ function IntakeSection({ intake }: { intake: IntakeProfile | null }) {
   );
 }
 
+// The "mark as applied" tracker's founder-facing side (built 2026-10-02) —
+// the first real signal of which matches actually turn into action, not
+// just which ones were computed as a fit. Self-reported by the user, same
+// "not yet verified" discipline as everything else on this page — this is a
+// claim the user made, not confirmed application proof.
+function AppliedMatchesSection({ appliedMatches }: { appliedMatches: AdminAppliedMatch[] }) {
+  return (
+    <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+      <h2 className="text-sm font-semibold text-slate-900">Applied matches</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        Matches this user has self-marked as applied to.
+      </p>
+
+      {appliedMatches.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500">No matches marked as applied yet.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {appliedMatches.map((match) => (
+            <li key={match.opportunityId} className="rounded-2xl bg-slate-50 p-3 text-xs">
+              <p className="font-semibold text-slate-800">{match.opportunityTitle}</p>
+              <p className="mt-0.5 text-slate-500">
+                {match.opportunityProvider} · Applied {formatDateTime(match.appliedAt)}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 const TIER_LABELS: Record<string, string> = {
   Free: 'Free',
   Tier1: 'Tier 1 — Unlock all matches',
@@ -981,6 +1012,12 @@ export default function AdminUserProfilePage() {
                 Fraud-flagged{user.fraudFlagNote ? ` — ${user.fraudFlagNote}` : ''}
               </span>
             )}
+            {user.deletionScheduledFor && (
+              <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                Deleting {formatDateTime(user.deletionScheduledFor)}
+                {user.deletionReason ? ` — "${user.deletionReason}"` : ''}
+              </span>
+            )}
             {user.effectiveTier !== 'Free' && (
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                 {TIER_LABELS[user.effectiveTier] ?? user.effectiveTier}
@@ -1090,6 +1127,8 @@ export default function AdminUserProfilePage() {
         <PurchasesSection effectiveTier={user.effectiveTier} purchases={user.purchases} />
 
         <IntakeSection intake={user.intake} />
+
+        <AppliedMatchesSection appliedMatches={user.appliedMatches} />
 
         <DataConsistencySection user={user} />
 

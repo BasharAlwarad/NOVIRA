@@ -23,7 +23,14 @@ export function GermanyMatchesMap({ stateBreakdown }: { stateBreakdown: StateCou
   const maxCount = Math.max(...stateBreakdown.map((entry) => entry.count));
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200">
+    // `isolate` creates a new stacking context scoped to this wrapper —
+    // found live: Leaflet's own internal panes/controls use z-index values
+    // (commonly 400-1000+) that exceed the sticky nav's z-50, so the map
+    // painted over it on scroll. Rather than chase whatever number Leaflet
+    // happens to pick (version-fragile), isolation contains all of
+    // Leaflet's internal stacking inside this div — nothing it does can
+    // ever escape to overlap a sibling/ancestor like the nav.
+    <div className="isolate overflow-hidden rounded-3xl border border-slate-200">
       <MapContainer
         center={GERMANY_CENTER}
         zoom={6}

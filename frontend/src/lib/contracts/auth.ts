@@ -39,4 +39,5 @@ export interface MeResponse {
   email: string;
   hasProfile: boolean;
   effectiveTier: EffectiveTier;
+  deletionScheduledFor: string | null;
 }

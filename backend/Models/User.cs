@@ -160,4 +160,15 @@ public class User
     public bool FraudFlagged { get; set; }
     public DateTime? FraudFlaggedAt { get; set; }
     public string? FraudFlagNote { get; set; }
+
+    // The account-deletion cooling-off flow (built 2026-10-04) — set only
+    // once ownership has been re-proven via AccountDeletionToken (see its
+    // own comment), never at request time. A non-null DeletionScheduledFor
+    // is what every "is this account pending deletion" check actually
+    // tests; the real, permanent deletion is a lazy sweep (no scheduler
+    // infra in this app) that runs at /auth/verify for this specific user
+    // and in bulk whenever the admin user list loads — see AccountEndpoints.cs.
+    public DateTime? DeletionRequestedAt { get; set; }
+    public DateTime? DeletionScheduledFor { get; set; }
+    public string? DeletionReason { get; set; }
 }

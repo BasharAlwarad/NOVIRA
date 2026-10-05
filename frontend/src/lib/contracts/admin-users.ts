@@ -18,6 +18,10 @@ export interface AdminUserListItem {
   pendingDocumentCount: number;
   createdAt: string;
   effectiveTier: EffectiveTier;
+  // Non-null while the account-deletion cooling-off window is active — see
+  // backend/Endpoints/AccountEndpoints.cs.
+  deletionScheduledFor: string | null;
+  deletionReason: string | null;
 }
 
 // Mirrors backend/Endpoints/DocumentsAdminEndpoints.cs's AdminPurchaseResponse —
@@ -95,6 +99,20 @@ export interface AdminUserDetail extends ProfileSnapshot, VerifiedProfile {
   // CV request had no way to show the actual intake content it's meant to
   // be built from, anywhere in the admin UI.
   intake: IntakeProfile | null;
+  // Matches this user has self-marked as applied, newest first — the
+  // founder's first real signal of which matches actually turn into action,
+  // not just which ones were computed as a fit. Mirrors backend/Endpoints/
+  // DocumentsAdminEndpoints.cs's AdminAppliedMatchResponse.
+  appliedMatches: AdminAppliedMatch[];
+  deletionScheduledFor: string | null;
+  deletionReason: string | null;
+}
+
+export interface AdminAppliedMatch {
+  opportunityId: string;
+  opportunityTitle: string;
+  opportunityProvider: string;
+  appliedAt: string;
 }
 
 export interface ReviewDocumentRequest {

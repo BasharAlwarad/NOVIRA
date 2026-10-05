@@ -12,4 +12,7 @@ export interface Account extends ProfileSnapshot, VerifiedProfile {
   createdAt: string;
   profileUpdatedAt: string | null;
   effectiveTier: EffectiveTier;
+  // Non-null while the account-deletion cooling-off window is active — see
+  // backend/Endpoints/AccountEndpoints.cs.
+  deletionScheduledFor: string | null;
 }

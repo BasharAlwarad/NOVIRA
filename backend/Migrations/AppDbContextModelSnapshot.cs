@@ -22,6 +22,65 @@ namespace Novira.Backend.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Novira.Backend.Models.AccountDeletionLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AccountDeletionLogs");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.AccountDeletionToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AccountDeletionTokens");
+                });
+
             modelBuilder.Entity("Novira.Backend.Models.CvReferenceSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -193,6 +252,31 @@ namespace Novira.Backend.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("MagicLinkTokens");
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.MatchActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OpportunityId");
+
+                    b.HasIndex("UserId", "OpportunityId")
+                        .IsUnique();
+
+                    b.ToTable("MatchActivities");
                 });
 
             modelBuilder.Entity("Novira.Backend.Models.Message", b =>
@@ -392,6 +476,15 @@ namespace Novira.Backend.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DeletionReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletionRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletionScheduledFor")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("DesiredPath")
                         .HasColumnType("integer");
 
@@ -569,6 +662,15 @@ namespace Novira.Backend.Migrations
                     b.ToTable("UserDocuments");
                 });
 
+            modelBuilder.Entity("Novira.Backend.Models.AccountDeletionToken", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Novira.Backend.Models.CvRequest", b =>
                 {
                     b.HasOne("Novira.Backend.Models.Opportunity", null)
@@ -595,6 +697,21 @@ namespace Novira.Backend.Migrations
 
             modelBuilder.Entity("Novira.Backend.Models.MagicLinkToken", b =>
                 {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.MatchActivity", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Novira.Backend.Models.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")

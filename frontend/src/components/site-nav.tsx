@@ -8,12 +8,24 @@ import { listMyMessages, markAllMessagesRead } from '@/lib/api/messages';
 import type { EffectiveTier } from '@/lib/contracts/account';
 import { usePolling } from '@/hooks/usePolling';
 import { useLiveMessages } from '@/hooks/useLiveMessages';
+import { MessagesPanel } from '@/components/messages-panel';
 
 const navLinks = [
-  { label: 'Assessment', href: '/assessment' },
   { label: 'Services', href: '/#services' },
   { label: 'Contact', href: '/#contact' },
 ];
+
+// Short labels for the persistent tier badge (point 2 of the 2026-10-04
+// UI/UX hardening pass) — distinct from account/page.tsx's own TIER_LABELS,
+// which spells out what each tier includes; this one needs to fit in a
+// small pill, so the "what does this mean" job is left to wherever the
+// badge links (the rewritten #services section).
+const TIER_BADGE_LABELS: Record<EffectiveTier, string> = {
+  Free: 'Free',
+  Tier1: 'Tier 1',
+  Tier2: 'Tier 2',
+  Tier3: 'Tier 3',
+};
 
 // Slower than the account page's own poll (SiteNav renders on every page,
 // so this fires far more often across a session) — the badge just needs to
@@ -31,6 +43,10 @@ export function SiteNav() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
   const [effectiveTier, setEffectiveTier] = useState<EffectiveTier | null>(null);
+  // Gates the "Assessment" nav link (point 4) — doesn't make sense to keep
+  // inviting someone to retake the assessment once they already have a
+  // profile from it.
+  const [hasProfile, setHasProfile] = useState(false);
 
   // Best-effort — a failed fetch just means a stale/missing badge, not
   // worth surfacing as an error on every page that renders the nav. A
@@ -51,6 +67,7 @@ export function SiteNav() {
         if (cancelled) return;
         setSignedIn(user !== null);
         setEffectiveTier(user?.effectiveTier ?? null);
+        setHasProfile(user?.hasProfile ?? false);
 
         if (user !== null) {
           refreshUnreadCount();
@@ -89,6 +106,7 @@ export function SiteNav() {
   });
 
   return (
+    <>
     <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <Link href="/" className="group flex items-center gap-3 text-white">
@@ -106,6 +124,17 @@ export function SiteNav() {
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
+          {/* Doesn't make sense to keep inviting a retake once a profile
+              already exists (point 4) — signed-out visitors and fresh
+              signups with no profile yet still see it. */}
+          {!hasProfile && (
+            <Link
+              href="/assessment"
+              className="text-sm font-medium text-slate-300 transition hover:text-white"
+            >
+              Assessment
+            </Link>
+          )}
           {navLinks.map((link) => (
             <Link
               key={link.label}
@@ -132,6 +161,18 @@ export function SiteNav() {
                   <span className="h-2 w-2 rounded-full bg-emerald-400" aria-label="New message" />
                 )}
               </Link>
+              {/* The persistent tier badge (point 2) — links through to
+                  the rewritten #services section, which doubles as the
+                  "what do I get at each level" explainer rather than
+                  building a second one. */}
+              {effectiveTier && (
+                <Link
+                  href="/#services"
+                  className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/30 transition hover:bg-emerald-400/25"
+                >
+                  {TIER_BADGE_LABELS[effectiveTier]}
+                </Link>
+              )}
             </>
           )}
           {signedIn === false && (
@@ -173,5 +214,73 @@ export function SiteNav() {
         </div>
       </div>
     </header>
+      {signedIn && effectiveTier && (
+        <FloatingContactButton
+          effectiveTier={effectiveTier}
+          hasUnread={hasUnread}
+          onOpen={() => {
+            if (pathname !== '/account') {
+              setHasUnread(false);
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// The floating contact icon (point 3 of the 2026-10-04 UI/UX hardening
+// pass) — a slide-up drawer around the exact same MessagesPanel the
+// dedicated /account/messages page uses, so this is never a second,
+// divergent implementation of the conversation. Only rendered once signed
+// in; messaging has no meaning for an anonymous visitor.
+function FloatingContactButton({
+  effectiveTier,
+  hasUnread,
+  onOpen,
+}: {
+  effectiveTier: EffectiveTier;
+  hasUnread: boolean;
+  onOpen: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          onOpen();
+        }}
+        aria-label="Contact us"
+        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-300"
+      >
+        <svg viewBox="0 0 20 20" fill="currentColor" className="h-6 w-6" aria-hidden="true">
+          <path
+            fillRule="evenodd"
+            d="M18 10c0 3.866-3.582 7-8 7a9.06 9.06 0 01-2.347-.306c-.584.296-1.925.864-4.181 1.234-.2.032-.352-.176-.273-.362.354-.836.674-1.95.77-2.966C2.249 13.016 2 11.57 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z"
+            clipRule="evenodd"
+          />
+        </svg>
+        {hasUnread && (
+          <span
+            className="absolute right-0 top-0 h-3.5 w-3.5 rounded-full bg-red-500 ring-2 ring-white"
+            aria-label="New message"
+          />
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-end bg-slate-950/20 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div onClick={(event) => event.stopPropagation()} className="w-full max-w-sm">
+            <MessagesPanel effectiveTier={effectiveTier} heightClassName="h-[28rem]" onClose={() => setOpen(false)} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

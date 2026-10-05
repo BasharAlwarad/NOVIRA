@@ -1,30 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { deleteMyAccount, fetchMyAccount, NotSignedInError as NoAccountSession } from '@/lib/api/account';
+import { cancelAccountDeletion, fetchMyAccount, NotSignedInError as NoAccountSession } from '@/lib/api/account';
 import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
-import { listMyMessages, markAllMessagesRead, sendMyMessage } from '@/lib/api/messages';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
 import { fetchMyIntake } from '@/lib/api/intake';
 import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
-import type { Message } from '@/lib/contracts/messages';
 import type { IntakeStatus } from '@/lib/contracts/intake';
 import type { PurchaseTier } from '@/lib/contracts/purchases';
 import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 import { Tier2UpsellCard } from '@/components/tier2-upsell';
-import { usePolling } from '@/hooks/usePolling';
-import { useLiveMessages } from '@/hooks/useLiveMessages';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
-
-// How often to check for new messages while this page is open — see
-// CLAUDE.md's messaging entry for why polling was chosen over WebSockets/
-// SSE for this feature.
-const MESSAGE_POLL_INTERVAL_MS = 20_000;
 
 function documentTypeLabel(type: UserDocumentSummary['documentType']): string {
   if (type === null) return 'Type not yet determined';
@@ -354,142 +345,6 @@ function DocumentsSection({
   );
 }
 
-function formatMessageDateTime(dateString: string): string {
-  return new Date(dateString).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-// Read state is page-level, not per-message (see the comment on the backend
-// endpoint) — the unread dot reflects the snapshot from when this section
-// loaded and won't reappear until a genuinely new message arrives on a
-// future visit. Two-way (reply box + sender-differentiated bubbles) added
-// 2026-09-30, gated to Tier2+ — Free/Tier1 see exactly the original
-// one-way, subject-led layout unchanged.
-function MessagesSection({
-  messages,
-  effectiveTier,
-  onSent,
-}: {
-  messages: Message[] | null;
-  effectiveTier: EffectiveTier;
-  onSent: (message: Message) => void;
-}) {
-  const canReply = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
-  const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!draft.trim()) return;
-
-    setSending(true);
-    setError(null);
-    try {
-      const sent = await sendMyMessage({ body: draft.trim() });
-      setDraft('');
-      onSent(sent);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send — try again.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold text-slate-900">Messages</h2>
-      <p className="mt-1 text-xs text-slate-500">
-        {canReply
-          ? 'Live chat with our team — replies arrive instantly.'
-          : 'Updates from our team — document decisions and anything else we send you land here.'}
-      </p>
-
-      <div className="mt-4 space-y-3">
-        {messages === null ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : messages.length === 0 ? (
-          <p className="text-sm text-slate-500">No messages yet.</p>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`rounded-2xl p-4 ${
-                message.sender === 'User'
-                  ? 'ml-6 bg-emerald-50 sm:ml-12'
-                  : 'mr-6 border border-slate-200 bg-slate-50 sm:mr-12'
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                  {message.readAt === null && message.sender === 'Admin' && (
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" aria-label="Unread" />
-                  )}
-                  {message.sender === 'Admin' ? message.subject : 'You'}
-                </p>
-                <p className="shrink-0 text-xs text-slate-400">{formatMessageDateTime(message.createdAt)}</p>
-              </div>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{message.body}</p>
-              {message.hasAttachment && (
-                <AttachmentDownloadButton messageId={message.id} fileName={message.attachmentFileName} />
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      {canReply && (
-        <form onSubmit={handleSend} className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Type a message…"
-            rows={2}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
-          />
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={!draft.trim() || sending}
-              className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {sending ? 'Sending…' : 'Send'}
-            </button>
-            {error && <p className="text-xs text-red-600">{error}</p>}
-          </div>
-        </form>
-      )}
-    </section>
-  );
-}
-
-// A plain navigation, not a JS fetch-then-window.open() — found live
-// 2026-10-02: a real browser's popup blocker silently swallowed
-// window.open() called after an awaited fetch (Playwright's own default
-// context doesn't enforce that, which is why this passed automated
-// verification but failed for a real user). The route itself is a cookie-
-// authenticated 302 straight to a fresh SAS URL (see the route's comment),
-// so a real anchor click sidesteps the whole class of problem — the browser
-// treats it as a genuine user-initiated navigation.
-function AttachmentDownloadButton({ messageId, fileName }: { messageId: string; fileName: string | null }) {
-  return (
-    <div className="mt-3 flex items-center gap-2 border-t border-slate-200/70 pt-3">
-      <a
-        href={`/api/messages/${messageId}/attachment`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
-      >
-        {`⬇ Download${fileName ? ` ${fileName}` : ''}`}
-      </a>
-    </div>
-  );
-}
 
 const TIER_LABELS: Record<EffectiveTier, string> = {
   Free: 'Free',
@@ -540,62 +395,189 @@ function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   );
 }
 
-function DangerZone({ onDeleted }: { onDeleted: () => void }) {
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+// Replaces the old always-visible "Delete account" red box (point 10 of the
+// 2026-10-04 UI/UX hardening pass) — the founder explicitly didn't want
+// deletion to be this obvious/easy to stumble into. Tucked into a dropdown
+// alongside Sign out instead, with "Delete account" styled distinctly
+// within that menu, not as its own loud section. The actual deletion flow
+// (reason, email confirmation, 7-day cooling-off) lives at /account/delete.
+function AccountMenu({ onLogout }: { onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="mt-1 flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600"
+      >
+        Account settings
+        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-10 mt-2 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_16px_48px_rgba(15,23,42,0.12)]"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={onLogout}
+            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Sign out
+          </button>
+          <Link
+            href="/account/delete"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+          >
+            Delete account
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatFullDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+// Shown instead of banner-and-continue — found while building this: the
+// backend doesn't actually block normal account access during the 7-day
+// window (only the eventual sweep enforces anything), so this is honest
+// communication + a fast path to cancel, not a hard gate. The rest of the
+// page still renders beneath it, same "stays reachable for cancellation"
+// shape the research behind this flow described.
+function PendingDeletionBanner({ scheduledFor }: { scheduledFor: string }) {
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleDelete = async () => {
-    setDeleting(true);
+  const handleCancel = async () => {
+    setCancelling(true);
     setError(null);
     try {
-      await deleteMyAccount();
-      onDeleted();
+      await cancelAccountDeletion();
+      window.location.reload();
     } catch {
-      setError('Failed to delete your account — try again.');
-      setDeleting(false);
+      setError('Failed to cancel — try again.');
+      setCancelling(false);
     }
   };
 
   return (
-    <section className="rounded-3xl border border-red-200 bg-red-50/40 p-5">
-      <h2 className="text-sm font-semibold text-red-900">Delete account</h2>
-      <p className="mt-1 text-xs text-red-700">
-        Permanently deletes your account, profile, and every uploaded document. This cannot be
-        undone.
+    <section className="rounded-3xl border border-red-200 bg-red-50/60 p-5">
+      <h2 className="text-sm font-semibold text-red-900">Account scheduled for deletion</h2>
+      <p className="mt-1 text-sm leading-6 text-red-800">
+        Your account will be permanently deleted on <strong>{formatFullDate(scheduledFor)}</strong>.
+        Changed your mind?
       </p>
-
-      {!confirming ? (
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="mt-3 rounded-full border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
-        >
-          Delete my account
-        </button>
-      ) : (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <p className="text-sm font-medium text-red-900">Are you sure?</p>
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={handleDelete}
-            className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {deleting ? 'Deleting…' : 'Yes, delete everything'}
-          </button>
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={() => setConfirming(false)}
-            className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={handleCancel}
+        disabled={cancelling}
+        className="mt-3 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {cancelling ? 'Cancelling…' : 'Cancel deletion, keep my account'}
+      </button>
       {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
     </section>
+  );
+}
+
+// Collapses the CV profile and self-reported profile into tabs (point 6 of
+// the 2026-10-04 UI/UX hardening pass) — the founder's own complaint:
+// having both as big, always-expanded cards reads as confusing/redundant,
+// especially once a user is paying for the CV service. The fix that was
+// agreed is purely this — visual decluttering — not a backend field lock:
+// checked the self-report model and found it never even collects true
+// identity facts (name/DOB/nationality/passport number) in the first
+// place, so there's nothing there to protect that isn't already protected
+// by simply not existing as a self-edit path. Verified data stays paired
+// with the Profile tab, since it's the confirmed version of the same
+// fields, not a third separate concern.
+function ProfileTabs({ account, intakeStatus }: { account: Account; intakeStatus: IntakeStatus | null }) {
+  const [tab, setTab] = useState<'cv' | 'profile'>('cv');
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setTab('cv')}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+            tab === 'cv' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          CV profile
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('profile')}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+            tab === 'profile' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          Your profile
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-6">
+        {tab === 'cv' && <CvProfileSection status={intakeStatus} />}
+        {tab === 'profile' && (
+          <>
+            <ProfileSection account={account} />
+            <VerifiedSection account={account} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Messages moved to their own route (point 7 of the 2026-10-04 UI/UX
+// hardening pass) — this is just a short teaser card linking there, not the
+// conversation itself (that lives in MessagesPanel, shared with the
+// floating contact drawer). Keeps /account from needing its own
+// fetch/poll/live-push wiring for messages at all anymore.
+function MessagesTeaser({ effectiveTier }: { effectiveTier: EffectiveTier }) {
+  const canReply = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
+  return (
+    <Link
+      href="/account/messages"
+      className="block rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-emerald-300"
+    >
+      <h2 className="text-sm font-semibold text-slate-900">Messages</h2>
+      <p className="mt-1 text-xs text-slate-500">
+        {canReply
+          ? 'Live chat with our team — replies arrive instantly.'
+          : 'Updates from our team — document decisions and anything else we send you land here.'}
+      </p>
+      <p className="mt-3 text-sm font-semibold text-emerald-700">Open messages →</p>
+    </Link>
   );
 }
 
@@ -609,7 +591,6 @@ export default function AccountPage() {
   const router = useRouter();
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const [documents, setDocuments] = useState<UserDocumentSummary[] | null>(null);
-  const [messages, setMessages] = useState<Message[] | null>(null);
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatus | null>(null);
   const [justUpdated, setJustUpdated] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState<{ text: string; isError: boolean } | null>(
@@ -622,23 +603,6 @@ export default function AccountPage() {
       .catch(() => {
         // The account fetch below already surfaces sign-in/error state;
         // a failed document list on its own just leaves the section empty.
-      });
-  }, []);
-
-  const loadMessages = useCallback(() => {
-    listMyMessages()
-      .then((data) => {
-        setMessages(data);
-        // Viewing this page is what "read" means in this first pass — see
-        // the comment on MessagesEndpoints.cs's POST /read-all. Fire-and-
-        // forget: a failure here just means the unread dot persists until
-        // the next successful visit, not worth surfacing as an error.
-        if (data.some((message) => message.readAt === null)) {
-          markAllMessagesRead().catch(() => {});
-        }
-      })
-      .catch(() => {
-        // Same reasoning as loadDocuments above.
       });
   }, []);
 
@@ -658,13 +622,12 @@ export default function AccountPage() {
       .then((account) => {
         setState({ status: 'loaded', account });
         loadDocuments();
-        loadMessages();
         loadIntakeStatus();
       })
       .catch((error) => {
         setState({ status: error instanceof NoAccountSession ? 'not-signed-in' : 'error' });
       });
-  }, [loadDocuments, loadMessages, loadIntakeStatus]);
+  }, [loadDocuments, loadIntakeStatus]);
 
   // Landed here from /assessment/edit's redirectTo="/account?updated=1" —
   // read directly off window.location rather than useSearchParams() to
@@ -722,36 +685,8 @@ export default function AccountPage() {
       });
   }, [router]);
 
-  const effectiveTier = state.status === 'loaded' ? state.account.effectiveTier : null;
-  const isLiveTier = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
-
-  // A new message won't otherwise appear until the page is manually
-  // reloaded — for Free/Tier1 this poll is still what fixes that; Tier2+
-  // gets instant push instead (see useLiveMessages.ts) and this poll turns
-  // off for them, since the live connection already keeps them current.
-  usePolling(loadMessages, MESSAGE_POLL_INTERVAL_MS, state.status === 'loaded' && !isLiveTier);
-
-  // Prepends live-pushed messages straight into the visible list — a
-  // duplicate is possible if a poll and a push race (harmless, just
-  // de-duped by id) rather than something worth coordinating around. Also
-  // marks it read immediately (found live 2026-09-30: it was staying
-  // flagged unread even while visibly being looked at on this exact page)
-  // — being on /account when it arrives is itself proof it's been seen,
-  // same reasoning as SiteNav's own fix.
-  useLiveMessages(effectiveTier, (message) => {
-    setMessages((current) => {
-      const withoutDuplicate = (current ?? []).filter((m) => m.id !== message.id);
-      return [message, ...withoutDuplicate];
-    });
-    markAllMessagesRead().catch(() => {});
-  });
-
   const handleLogout = async () => {
     await logout();
-    router.push('/');
-  };
-
-  const handleDeleted = () => {
     router.push('/');
   };
 
@@ -768,15 +703,7 @@ export default function AccountPage() {
               Profile, documents &amp; messages
             </h1>
           </div>
-          {state.status === 'loaded' && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="mt-1 text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
-            >
-              Sign out
-            </button>
-          )}
+          {state.status === 'loaded' && <AccountMenu onLogout={handleLogout} />}
         </div>
 
         {state.status === 'loaded' && (
@@ -826,23 +753,14 @@ export default function AccountPage() {
 
           {state.status === 'loaded' && (
             <>
+              {state.account.deletionScheduledFor && (
+                <PendingDeletionBanner scheduledFor={state.account.deletionScheduledFor} />
+              )}
               {!state.account.profileUpdatedAt && <NoProfileBanner />}
               <PlanSection effectiveTier={state.account.effectiveTier} />
-              <CvProfileSection status={intakeStatus} />
-              <ProfileSection account={state.account} />
-              <VerifiedSection account={state.account} />
+              <ProfileTabs account={state.account} intakeStatus={intakeStatus} />
               <DocumentsSection documents={documents} onUploaded={loadDocuments} />
-              <MessagesSection
-                messages={messages}
-                effectiveTier={state.account.effectiveTier}
-                onSent={(message) => setMessages((current) => [message, ...(current ?? [])])}
-              />
-              <div className="pt-2">
-                <Link href="/matches" className="block text-sm text-emerald-700 underline underline-offset-2">
-                  View my matching opportunities →
-                </Link>
-              </div>
-              <DangerZone onDeleted={handleDeleted} />
+              <MessagesTeaser effectiveTier={state.account.effectiveTier} />
             </>
           )}
         </div>

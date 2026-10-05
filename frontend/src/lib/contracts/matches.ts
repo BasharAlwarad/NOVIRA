@@ -27,6 +27,10 @@ export interface MatchResult {
   tuitionFeeEur: number | null;
   startDate: string | null; // yyyy-MM-dd
   applicationDeadline: string | null; // yyyy-MM-dd
+  // When this opportunity became visible to users (admin-approved it) —
+  // added 2026-10-04 for the "new" highlight on /matches. Null for an
+  // opportunity approved before this field existed.
+  reviewedAt: string | null;
 }
 
 // Mirrors backend/Endpoints/MatchingEndpoints.cs's StateCount — an

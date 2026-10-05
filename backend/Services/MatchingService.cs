@@ -24,7 +24,14 @@ public record MatchResult(
     int? MonthlyCompensationEur,
     int? TuitionFeeEur,
     DateOnly? StartDate,
-    DateOnly? ApplicationDeadline);
+    DateOnly? ApplicationDeadline,
+    // When this opportunity became visible to users (admin-Approved it),
+    // not when it was first synced/entered — added 2026-10-04 for the
+    // /matches "new" highlight (point 12 of the UI/UX hardening pass).
+    // ReviewedAt, not CreatedAt: a row can sit Pending for a while before
+    // approval, and "new to you" should mean "recently became visible,"
+    // not "recently scraped."
+    DateTime? ReviewedAt);
 
 /// <summary>
 /// Rule-based matching against real, verified (Approved-only) Opportunity
@@ -77,7 +84,8 @@ public static class MatchingService
                 r.Opportunity.MonthlyCompensationEur,
                 r.Opportunity.TuitionFeeEur,
                 r.Opportunity.StartDate,
-                r.Opportunity.ApplicationDeadline))
+                r.Opportunity.ApplicationDeadline,
+                r.Opportunity.ReviewedAt))
             .ToList();
     }
 

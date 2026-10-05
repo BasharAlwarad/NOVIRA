@@ -51,6 +51,11 @@ function UserRow({ user, hasNewReply }: { user: AdminUserListItem; hasNewReply: 
               Flagged
             </span>
           )}
+          {user.deletionScheduledFor && (
+            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+              Deleting {formatDate(user.deletionScheduledFor)}
+            </span>
+          )}
           {user.effectiveTier !== 'Free' && (
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
               {user.effectiveTier}

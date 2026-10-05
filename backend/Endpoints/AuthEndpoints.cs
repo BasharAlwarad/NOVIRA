@@ -40,7 +40,8 @@ public record VerifyRequest(string Token);
 // profile-less fresh signup somewhere useful (/account) instead of /matches,
 // which would otherwise just show an unexplained empty result.
 public record VerifyResponse(string SessionToken, string Email, bool HasProfile);
-public record MeResponse(string Email, bool HasProfile, string EffectiveTier);
+public record MeResponse(
+    string Email, bool HasProfile, string EffectiveTier, DateTime? DeletionScheduledFor);
 
 /// <summary>
 /// The account-signup boundary from Plan.md §4 — free, email-only,
@@ -155,7 +156,8 @@ public static class AuthEndpoints
         })
         .RequireRateLimiting("auth-request-link");
 
-        group.MapPost("/verify", async (VerifyRequest request, AppDbContext db) =>
+        group.MapPost("/verify", async (
+            VerifyRequest request, AppDbContext db, AzureBlobStorageService storage, ILoggerFactory loggerFactory) =>
         {
             if (string.IsNullOrWhiteSpace(request.Token))
             {
@@ -194,6 +196,19 @@ public static class AuthEndpoints
                 return Results.BadRequest(new { message = "This link is invalid or has expired." });
             }
 
+            // The lazy sweep for the account-deletion cooling-off flow
+            // (AccountEndpoints.cs) — this app has no scheduler
+            // infrastructure, so the real, permanent deletion happens the
+            // next time anyone actually touches the account, and signing
+            // back in during/after the window is exactly that. If the 7
+            // days have passed, finish the deletion now instead of ever
+            // creating a new session for a row that's about to not exist.
+            if (user.DeletionScheduledFor is { } scheduledFor && scheduledFor <= DateTime.UtcNow)
+            {
+                await AccountDeletionHelper.PermanentlyDeleteAsync(db, storage, loggerFactory.CreateLogger("Auth"), user);
+                return Results.BadRequest(new { message = "This account was permanently deleted." });
+            }
+
             // The trust boundary this token exists for: ownership of the
             // inbox is now proven (the atomic claim above succeeded), so the
             // profile snapshot that rode along with the request can now
@@ -228,7 +243,8 @@ public static class AuthEndpoints
             var purchases = await db.Purchases.Where(p => p.UserId == user.Id).ToListAsync();
             var effectiveTier = EffectiveTierCalculator.Compute(purchases);
 
-            return Results.Ok(new MeResponse(user.Email, user.ProfileUpdatedAt is not null, effectiveTier.ToString()));
+            return Results.Ok(new MeResponse(
+                user.Email, user.ProfileUpdatedAt is not null, effectiveTier.ToString(), user.DeletionScheduledFor));
         });
 
         authenticated.MapPost("/logout", async (HttpContext httpContext, AppDbContext db) =>
