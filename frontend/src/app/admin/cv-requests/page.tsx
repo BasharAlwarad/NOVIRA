@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   deliverCvRequest,
   fetchCoverLetterPdfBlob,
@@ -270,6 +271,45 @@ function CvGenerationPanel({
   );
 }
 
+// Status filter — mutually exclusive, so tabs rather than toggle chips (same
+// reasoning as /matches' own status filter and /admin/opportunities' status
+// tabs): a request is in exactly one of these at a time. Addresses the
+// founder's direct ask — "delivered should be alone, new should be alone" —
+// by letting the list be narrowed to just one status instead of always
+// showing everything in one flat list.
+type StatusFilter = 'All' | CvRequestStatus;
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: 'All', label: 'All' },
+  { key: 'Requested', label: 'Requested' },
+  { key: 'InReview', label: 'In review' },
+  { key: 'Delivered', label: 'Delivered' },
+];
+
+// Combinable (AND'd, not OR'd) toggle filters — unlike status above, a
+// request can independently be e.g. both "needs a draft" and a reference
+// example at the same time, so these are chips, not tabs.
+type AttentionFlag = 'needsDraft' | 'referenceExample';
+const ATTENTION_FLAGS: { key: AttentionFlag; label: string }[] = [
+  { key: 'needsDraft', label: 'Needs a draft' },
+  { key: 'referenceExample', label: 'Reference example' },
+];
+
+function matchesFlag(request: AdminCvRequest, flag: AttentionFlag): boolean {
+  switch (flag) {
+    case 'needsDraft':
+      return !request.hasDraft;
+    case 'referenceExample':
+      return request.isReferenceExample;
+  }
+}
+
+function parseFlagsParam(value: string | null): Set<AttentionFlag> {
+  if (!value) return new Set();
+  return new Set(
+    value.split(',').filter((v): v is AttentionFlag => ATTENTION_FLAGS.some((f) => f.key === v))
+  );
+}
+
 // The founder-facing queue for Tier2+ "request a CV" clicks on /matches
 // (Architecture.md's "Tier 2 services" build order, step 4 — review before
 // delivery), plus the AI generation/revision UI (step 5, built 2026-10-01).
@@ -279,13 +319,19 @@ function CvGenerationPanel({
 // admin detail page, linked from each row below; PDF rendering and
 // file-attachment delivery aren't built yet, so for now the admin copies
 // the reviewed text from here into that message by hand.
-export default function AdminCvRequestsPage() {
+function AdminCvRequestsPageContent() {
   const { adminKey } = useAdminKey();
   const [requests, setRequests] = useState<AdminCvRequest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deliveringId, setDeliveringId] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const statusFilter = (searchParams.get('status') as StatusFilter | null) ?? 'All';
+  const activeFlags = parseFlagsParam(searchParams.get('flags'));
 
   const load = useCallback(() => {
     listCvRequests(adminKey)
@@ -327,6 +373,54 @@ export default function AdminCvRequestsPage() {
     }
   };
 
+  const buildFilterHref = (nextStatus: StatusFilter, nextFlags: Set<AttentionFlag>): string => {
+    const params = new URLSearchParams();
+    if (nextStatus !== 'All') params.set('status', nextStatus);
+    if (nextFlags.size > 0) params.set('flags', Array.from(nextFlags).join(','));
+    const query = params.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  };
+
+  const toggleFlagHref = (flag: AttentionFlag): string => {
+    const next = new Set(activeFlags);
+    if (next.has(flag)) {
+      next.delete(flag);
+    } else {
+      next.add(flag);
+    }
+    return buildFilterHref(statusFilter, next);
+  };
+
+  const search = searchInput.trim().toLowerCase();
+  const filtered = (requests ?? []).filter((request) => {
+    if (statusFilter !== 'All' && request.status !== statusFilter) {
+      return false;
+    }
+    for (const flag of activeFlags) {
+      if (!matchesFlag(request, flag)) {
+        return false;
+      }
+    }
+    if (
+      search &&
+      !request.userEmail.toLowerCase().includes(search) &&
+      !request.opportunityTitle.toLowerCase().includes(search) &&
+      !request.opportunityProvider.toLowerCase().includes(search)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const hasActiveFilters = statusFilter !== 'All' || activeFlags.size > 0 || search.length > 0;
+  const statusCounts = STATUS_FILTERS.reduce<Record<StatusFilter, number>>(
+    (acc, { key }) => {
+      acc[key] = key === 'All' ? (requests?.length ?? 0) : (requests?.filter((r) => r.status === key).length ?? 0);
+      return acc;
+    },
+    { All: 0, Requested: 0, InReview: 0, Delivered: 0 }
+  );
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
       <h1 className="text-xl font-semibold text-slate-950">CV requests</h1>
@@ -335,6 +429,63 @@ export default function AdminCvRequestsPage() {
         ask for changes until it&apos;s right, then send it — the user gets both as real PDF
         attachments in their in-app messages.
       </p>
+      <p className="mt-2 text-xs text-slate-500">
+        {requests
+          ? `${filtered.length} of ${requests.length} request${requests.length === 1 ? '' : 's'}${hasActiveFilters ? ' match this filter' : ''}`
+          : 'Loading…'}
+      </p>
+
+      <input
+        value={searchInput}
+        onChange={(event) => setSearchInput(event.target.value)}
+        placeholder="Search by user email, opportunity title, or provider"
+        className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+      />
+
+      <div className="mt-4 flex flex-wrap gap-1 rounded-full bg-slate-100 p-1">
+        {STATUS_FILTERS.map(({ key, label }) => {
+          const active = key === statusFilter;
+          return (
+            <Link
+              key={key}
+              href={buildFilterHref(key, activeFlags)}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                active ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {label} ({statusCounts[key]})
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {ATTENTION_FLAGS.map(({ key, label }) => {
+          const active = activeFlags.has(key);
+          return (
+            <Link
+              key={key}
+              href={toggleFlagHref(key)}
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                active
+                  ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+            </Link>
+          );
+        })}
+        {hasActiveFilters && (
+          <Link
+            href={pathname}
+            onClick={() => setSearchInput('')}
+            className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
+          >
+            Clear all filters
+          </Link>
+        )}
+      </div>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
@@ -343,8 +494,10 @@ export default function AdminCvRequestsPage() {
           <p className="text-sm text-slate-500">Loading…</p>
         ) : requests.length === 0 ? (
           <p className="text-sm text-slate-500">No CV requests yet.</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-slate-500">No requests match this filter.</p>
         ) : (
-          requests.map((request) => (
+          filtered.map((request) => (
             <div key={request.id} className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -414,5 +567,16 @@ export default function AdminCvRequestsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// useSearchParams() requires a <Suspense> boundary or the production build
+// fails to prerender the route — same fix already applied elsewhere
+// (/matches, the admin opportunities and users pages).
+export default function AdminCvRequestsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminCvRequestsPageContent />
+    </Suspense>
   );
 }
