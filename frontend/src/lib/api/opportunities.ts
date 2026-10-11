@@ -106,3 +106,55 @@ export async function updateOpportunityStatus(
 
   return (await response.json()) as Opportunity;
 }
+
+// Retires a listing without deleting it — only reachable from Approved
+// (the backend rejects archiving a Pending/Denied row). A user's own
+// history (applied/CV-requested) survives via the snapshot fields on
+// MatchActivity/CvRequest, so this is safe to call freely.
+export async function archiveOpportunity(
+  adminKey: string,
+  id: string,
+  reason?: string
+): Promise<Opportunity> {
+  const response = await adminFetch(`/api/admin/opportunities/${id}/archive`, adminKey, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to archive opportunity.');
+  }
+
+  return (await response.json()) as Opportunity;
+}
+
+export interface StaleCandidate {
+  opportunityId: string;
+  title: string;
+  provider: string;
+  missCount: number;
+}
+
+export interface CheckStaleResult {
+  checkedCount: number;
+  candidates: StaleCandidate[];
+}
+
+// Flags likely-stale Approved Ausbildung listings for human confirmation —
+// never auto-archives. See OpportunitySyncService.CheckStaleAusbildungAsync's
+// own comment for why even a flagged candidate isn't a certainty (a
+// high-volume employer's real listing can still miss the search API's page
+// cap) — always worth a quick look before archiving, not a blind rubber
+// stamp.
+export async function checkStaleAusbildung(adminKey: string): Promise<CheckStaleResult> {
+  const response = await adminFetch('/api/admin/opportunities/check-stale-ausbildung', adminKey, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to check for stale Ausbildung listings.');
+  }
+
+  return (await response.json()) as CheckStaleResult;
+}

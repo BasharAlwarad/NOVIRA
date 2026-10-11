@@ -11,6 +11,11 @@ namespace Novira.Backend.Services;
 public record UniversityGenerationResult(
     int Added, int FieldsResearched, int FieldsSkipped, long InputTokens, long OutputTokens, decimal EstimatedCostUsd);
 
+// A likely-stale Approved Bundesagentur listing, surfaced for an admin to
+// confirm archiving — never archived automatically (see
+// CheckStaleAusbildungAsync's own comment for why).
+public record StaleCandidate(Guid OpportunityId, string Title, string Provider, int MissCount);
+
 /// <summary>
 /// Fetches real Ausbildung listings from the Bundesagentur Jobsuche API and
 /// upserts them as Pending Opportunity rows, going through the same
@@ -85,6 +90,73 @@ public class OpportunitySyncService(
 
         await db.SaveChangesAsync(cancellationToken);
         return added;
+    }
+
+    // How many consecutive misses before a listing is surfaced as a
+    // candidate for archiving (see OpportunityResponse.StaleCheckMissCount's
+    // own comment) — never auto-archived, only flagged. Kept at 2 even after
+    // the targeted-search fix below (not 1), since a large employer with
+    // many postings can still occasionally push a specific one off the
+    // first page of its own name search.
+    private const int StaleMissThreshold = 2;
+
+    // Per-listing targeted search, not a blind bulk re-search — the original
+    // implementation compared each Approved listing's SourceRef against one
+    // nationwide SearchAusbildungAsync(size: 200) call, on the theory that a
+    // generous page size would cover most of the Approved set. Verified live
+    // 2026-10-11 that this was wrong: the nationwide search has 170k+ total
+    // results, so "its largest, most recent 200" essentially never contains
+    // a specific listing synced weeks/months ago, regardless of whether it's
+    // actually still live — a real test run against the live Approved set
+    // flagged all 54/54 rows as a miss on the very first call, which is the
+    // check being broken, not 54 real disappearances.
+    // Fix: search by the opportunity's own provider name instead
+    // (SearchAusbildungByKeywordAsync's "was" param — confirmed live to be a
+    // real free-text filter, unlike "arbeitgeber" which needs an exact facet
+    // value and returned 0 results for a real employer name). This scopes
+    // each check to roughly that employer's own postings, where the target
+    // listing's SourceRef is actually findable if still live. Costs one API
+    // call per Approved Bundesagentur listing instead of one call total —
+    // acceptable since this is a manually-triggered admin action, not a
+    // scheduled job.
+    //
+    // Known remaining limitation, confirmed live 2026-10-11: a high-volume
+    // employer can still produce a false "miss" even at this API's maximum
+    // allowed page size (200 — size=600 was rejected outright with
+    // EINGABEN_UNVOLLSTAENDIG_ODER_FEHLERHAFT). A real test against "R+V
+    // Allgemeine Versicherung AG" (591 total Ausbildung-type postings
+    // nationwide under that name) failed to find 5 of our own genuinely-
+    // tracked SourceRefs even at size=200 — there is no guarantee the search
+    // API's internal ranking surfaces a specific older posting before its
+    // page cutoff. This is exactly why candidates are only ever flagged for
+    // human confirmation, never auto-archived: a flagged large-employer
+    // listing may just be a page-size miss, not a real disappearance.
+    public async Task<(int Checked, List<StaleCandidate> Candidates)> CheckStaleAusbildungAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var approved = await db.Opportunities
+            .Where(o => o.Status == OpportunityStatus.Approved
+                && o.Source == OpportunitySource.Bundesagentur
+                && o.SourceRef != null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var opportunity in approved)
+        {
+            var matches = await client.SearchAusbildungByKeywordAsync(
+                opportunity.Provider, size: 50, cancellationToken);
+            var stillLive = matches.Any(m => m.Referenznummer == opportunity.SourceRef);
+
+            opportunity.StaleCheckMissCount = stillLive ? 0 : opportunity.StaleCheckMissCount + 1;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        var candidates = approved
+            .Where(o => o.StaleCheckMissCount >= StaleMissThreshold)
+            .Select(o => new StaleCandidate(o.Id, o.Title, o.Provider, o.StaleCheckMissCount))
+            .ToList();
+
+        return (approved.Count, candidates);
     }
 
     // Priority occupation fields — originally the 4 CLAUDE.md's "Real

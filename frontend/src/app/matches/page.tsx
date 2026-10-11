@@ -252,6 +252,115 @@ function filterAndSortMatches(
   return [...notApplied, ...applied];
 }
 
+// A user's own "applied"/"CV requested" history for an opportunity that has
+// since been archived (no longer live from its original source) — these
+// never appear in state.matches (the backend's /matches only ever returns
+// Approved opportunities), so they need their own display path built from
+// the snapshot fields on MatchActivity/CvRequest, not a live join. Keyed by
+// opportunityId so an opportunity with both an applied-marker and a CV
+// request shows as one merged card, not two.
+interface ArchivedHistoryItem {
+  opportunityId: string;
+  title: string;
+  provider: string;
+  path: MatchResult['path'] | null;
+  appliedAt: string | null;
+  cvRequestStatus: CvRequestStatus | null;
+}
+
+function buildArchivedHistory(
+  matchActivity: MatchActivity[],
+  cvRequests: CvRequest[]
+): ArchivedHistoryItem[] {
+  const items = new Map<string, ArchivedHistoryItem>();
+
+  matchActivity
+    .filter((activity) => activity.isArchived)
+    .forEach((activity) => {
+      items.set(activity.opportunityId, {
+        opportunityId: activity.opportunityId,
+        title: activity.opportunityTitle,
+        provider: activity.opportunityProvider,
+        path: activity.opportunityPath,
+        appliedAt: activity.appliedAt,
+        cvRequestStatus: null,
+      });
+    });
+
+  cvRequests
+    .filter((request) => request.isArchived)
+    .forEach((request) => {
+      const existing = items.get(request.opportunityId);
+      if (existing) {
+        existing.cvRequestStatus = request.status;
+      } else {
+        items.set(request.opportunityId, {
+          opportunityId: request.opportunityId,
+          title: request.opportunityTitle,
+          provider: request.opportunityProvider,
+          path: null,
+          appliedAt: null,
+          cvRequestStatus: request.status,
+        });
+      }
+    });
+
+  return Array.from(items.values());
+}
+
+function ArchivedHistoryCard({ item }: { item: ArchivedHistoryItem }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          {item.path && (
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              {item.path}
+            </p>
+          )}
+          <h3 className="mt-1 text-base font-semibold text-slate-700">{item.title}</h3>
+          <p className="mt-1 text-sm text-slate-500">{item.provider}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+          No longer available
+        </span>
+      </div>
+      {(item.appliedAt || item.cvRequestStatus) && (
+        <p className="mt-3 text-xs text-slate-500">
+          {item.appliedAt && `You applied on ${formatFullDate(item.appliedAt)}.`}
+          {item.cvRequestStatus && ` CV request status: ${item.cvRequestStatus}.`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Shown below the live, scored matches — this is history, not a current
+// result, so it's deliberately a separate, visually quieter section rather
+// than mixed into the ranked list above.
+function ArchivedHistorySection({ items }: { items: ArchivedHistoryItem[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-8 space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+          No longer available
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          These are no longer live from their original source, but your own activity on them
+          (applied / CV requested) is kept.
+        </p>
+      </div>
+      {items.map((item) => (
+        <ArchivedHistoryCard key={item.opportunityId} item={item} />
+      ))}
+    </div>
+  );
+}
+
 // Real Opportunity fields (tuition/compensation/dates/description/source),
 // gracefully omitted rather than shown as an empty placeholder wherever
 // real data doesn't have them (especially common on Bundesagentur-synced
@@ -491,9 +600,9 @@ function MarkAppliedAction({
         type="button"
         onClick={handleMark}
         disabled={busy}
-        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? 'Saving…' : "I've applied to this"}
+        {busy ? 'Saving…' : '✓ Mark as applied'}
       </button>
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
@@ -905,6 +1014,9 @@ function MatchesPageContent() {
                   </div>
                 </>
               )}
+              <ArchivedHistorySection
+                items={buildArchivedHistory(state.matchActivity, state.cvRequests)}
+              />
             </>
           )}
 
@@ -989,6 +1101,14 @@ function MatchesPageContent() {
                   />
                 )}
               </div>
+
+              {/* Not tab-filtered — this is history, not a ranked result
+                  set, so it's shown once regardless of which path tab is
+                  active (a CV-requested-only entry has no path to filter
+                  by anyway, since CvRequestResponse doesn't carry one). */}
+              <ArchivedHistorySection
+                items={buildArchivedHistory(state.matchActivity, state.cvRequests)}
+              />
             </>
           )}
         </div>

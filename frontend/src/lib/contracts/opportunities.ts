@@ -1,5 +1,5 @@
 export type OpportunityPath = 'University' | 'Ausbildung';
-export type OpportunityStatus = 'Pending' | 'Approved' | 'Denied';
+export type OpportunityStatus = 'Pending' | 'Approved' | 'Denied' | 'Archived';
 export type OpportunitySource = 'Manual' | 'Bundesagentur' | 'AiResearch';
 
 // Mirrors backend/Models/Opportunity.cs's LanguageLevel — CEFR values plus
@@ -72,4 +72,7 @@ export interface Opportunity {
   status: OpportunityStatus;
   createdAt: string;
   reviewedAt: string | null;
+  archivedAt: string | null;
+  archiveReason: string | null;
+  staleCheckMissCount: number;
 }

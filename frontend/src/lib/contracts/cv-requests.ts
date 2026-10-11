@@ -3,6 +3,11 @@ export type CvRequestStatus = 'Requested' | 'InReview' | 'Delivered';
 
 // Mirrors backend/Endpoints/CvRequestsEndpoints.cs's CvRequestResponse —
 // the signed-in user's own view of a request they made.
+//
+// isArchived is a live check against the opportunity's current status, not
+// part of the Title/Provider snapshot above (those are frozen at request
+// time on purpose — see CvRequest.cs — but archiving can happen afterward,
+// so this has to be read fresh). Added 2026-10-11 for opportunity archiving.
 export interface CvRequest {
   id: string;
   opportunityId: string;
@@ -11,10 +16,14 @@ export interface CvRequest {
   status: CvRequestStatus;
   createdAt: string;
   updatedAt: string | null;
+  isArchived: boolean;
 }
 
-// Mirrors backend/Endpoints/CvRequestsAdminEndpoints.cs's AdminCvRequestResponse.
-export interface AdminCvRequest extends CvRequest {
+// Mirrors backend/Endpoints/CvRequestsAdminEndpoints.cs's AdminCvRequestResponse
+// — deliberately omits isArchived, which that backend response doesn't send
+// (the admin queue has no archiving-aware UI yet, unlike the user-facing
+// /cv-requests above).
+export interface AdminCvRequest extends Omit<CvRequest, 'isArchived'> {
   userId: string;
   userEmail: string;
   hasDraft: boolean;

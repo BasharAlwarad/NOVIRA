@@ -14,7 +14,13 @@ public record CvRequestResponse(
     string OpportunityProvider,
     CvRequestStatus Status,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    // A live check against the opportunity's current status, not part of
+    // the snapshot above (Title/Provider are frozen at request time on
+    // purpose — see CvRequest.cs — but archiving can happen afterward, so
+    // this has to be read fresh). Added 2026-10-11 for the opportunity-
+    // archiving feature.
+    bool IsArchived);
 
 public record CreateCvRequestRequest(Guid OpportunityId);
 
@@ -37,7 +43,14 @@ public static class CvRequestsEndpoints
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
 
-            return Results.Ok(requests.Select(ToResponse));
+            var opportunityIds = requests.Select(r => r.OpportunityId).ToList();
+            var archivedIds = (await db.Opportunities
+                .Where(o => opportunityIds.Contains(o.Id) && o.Status == OpportunityStatus.Archived)
+                .Select(o => o.Id)
+                .ToListAsync())
+                .ToHashSet();
+
+            return Results.Ok(requests.Select(r => ToResponse(r, archivedIds.Contains(r.OpportunityId))));
         });
 
         group.MapPost("/", async (
@@ -70,7 +83,7 @@ public static class CvRequestsEndpoints
                 r.UserId == user.Id && r.OpportunityId == request.OpportunityId && r.Status != CvRequestStatus.Delivered);
             if (existing is not null)
             {
-                return Results.Ok(ToResponse(existing));
+                return Results.Ok(ToResponse(existing, opportunity.Status == OpportunityStatus.Archived));
             }
 
             var cvRequest = new CvRequest
@@ -91,10 +104,10 @@ public static class CvRequestsEndpoints
                 "CV request received",
                 $"We've received your request for a CV/cover letter for \"{opportunity.Title}\" at {opportunity.Provider}. We'll review your profile and be in touch.");
 
-            return Results.Created($"/cv-requests/{cvRequest.Id}", ToResponse(cvRequest));
+            return Results.Created($"/cv-requests/{cvRequest.Id}", ToResponse(cvRequest, isArchived: false));
         });
     }
 
-    public static CvRequestResponse ToResponse(CvRequest r) =>
-        new(r.Id, r.OpportunityId, r.OpportunityTitle, r.OpportunityProvider, r.Status, r.CreatedAt, r.UpdatedAt);
+    public static CvRequestResponse ToResponse(CvRequest r, bool isArchived) =>
+        new(r.Id, r.OpportunityId, r.OpportunityTitle, r.OpportunityProvider, r.Status, r.CreatedAt, r.UpdatedAt, isArchived);
 }

@@ -4,11 +4,14 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   AdminUnauthorizedError,
+  archiveOpportunity,
+  checkStaleAusbildung,
   createOpportunity,
   generateUniversity,
   listOpportunities,
   syncAusbildung,
   updateOpportunityStatus,
+  type StaleCandidate,
 } from '@/lib/api/opportunities';
 import type { CreateOpportunityRequest, Opportunity, OpportunityPath } from '@/lib/contracts/opportunities';
 import { useAdminKey } from '@/hooks/useAdminKey';
@@ -35,6 +38,9 @@ function OpportunityPathViewContent({ path }: { path: OpportunityPath }) {
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generateMessage, setGenerateMessage] = useState<string | null>(null);
+  const [checkingStale, setCheckingStale] = useState(false);
+  const [staleCandidates, setStaleCandidates] = useState<StaleCandidate[] | null>(null);
+  const [staleMessage, setStaleMessage] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const statusFilter = (searchParams.get('status') as StatusFilter | null) ?? 'Pending';
 
@@ -69,6 +75,49 @@ function OpportunityPathViewContent({ path }: { path: OpportunityPath }) {
       } else {
         setError('Failed to update that opportunity.');
       }
+    }
+  };
+
+  const handleArchive = async (id: string, reason: string | undefined) => {
+    try {
+      const updated = await archiveOpportunity(adminKey, id, reason);
+      setOpportunities(
+        (current) => current?.map((item) => (item.id === updated.id ? updated : item)) ?? null
+      );
+      setStaleCandidates((current) => current?.filter((c) => c.opportunityId !== id) ?? current);
+    } catch (err) {
+      if (err instanceof AdminUnauthorizedError) {
+        clearAdminKey();
+      } else {
+        setError('Failed to archive that opportunity.');
+      }
+    }
+  };
+
+  // Ausbildung-only — flags likely-stale Approved listings for a human to
+  // confirm, never auto-archives. See CheckStaleAusbildungAsync's own
+  // comment for why even a flagged candidate isn't a certainty.
+  const handleCheckStale = async () => {
+    if (checkingStale) return;
+
+    setCheckingStale(true);
+    setStaleMessage(null);
+    try {
+      const result = await checkStaleAusbildung(adminKey);
+      setStaleCandidates(result.candidates);
+      setStaleMessage(
+        result.candidates.length > 0
+          ? `Checked ${result.checkedCount} Approved listings — ${result.candidates.length} look likely stale. Verify before archiving (a large employer can miss the search even while still live).`
+          : `Checked ${result.checkedCount} Approved listings — nothing looks stale yet.`
+      );
+    } catch (err) {
+      if (err instanceof AdminUnauthorizedError) {
+        clearAdminKey();
+      } else {
+        setStaleMessage('Failed to check — try again.');
+      }
+    } finally {
+      setCheckingStale(false);
     }
   };
 
@@ -132,28 +181,68 @@ function OpportunityPathViewContent({ path }: { path: OpportunityPath }) {
           <PathTabs />
         </div>
         <p className="mt-1 text-sm text-slate-600">
-          {counts.Pending} pending, {counts.Approved} approved, {counts.Denied} denied.
+          {counts.Pending} pending, {counts.Approved} approved, {counts.Denied} denied, {counts.Archived} archived.
         </p>
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <StatusFilterTabs counts={counts} />
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={generating}
-            title={
-              path === 'University'
-                ? 'Searches daad.de, study-in-germany.de, and hochschulkompass.de only — see Matching-Algorithm-Study.md §8 for the source-credibility design.'
-                : undefined
-            }
-            className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {generating ? 'Generating…' : `Generate ${path}`}
-          </button>
+          <div className="flex items-center gap-2">
+            {path === 'Ausbildung' && (
+              <button
+                type="button"
+                onClick={handleCheckStale}
+                disabled={checkingStale}
+                title="Searches each Approved listing's own employer name live — flags ones it can't find for you to confirm. Never archives automatically."
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {checkingStale ? 'Checking…' : 'Check for stale listings'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating}
+              title={
+                path === 'University'
+                  ? 'Searches daad.de, study-in-germany.de, and hochschulkompass.de only — see Matching-Algorithm-Study.md §8 for the source-credibility design.'
+                  : undefined
+              }
+              className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generating ? 'Generating…' : `Generate ${path}`}
+            </button>
+          </div>
         </div>
         {generateMessage && <p className="mt-2 text-xs text-slate-500">{generateMessage}</p>}
+        {staleMessage && <p className="mt-2 text-xs text-slate-500">{staleMessage}</p>}
+
+        {staleCandidates && staleCandidates.length > 0 && (
+          <div className="mt-4 space-y-2 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-xs font-semibold text-amber-800">
+              Likely-stale candidates — confirm before archiving:
+            </p>
+            {staleCandidates.map((candidate) => (
+              <div
+                key={candidate.opportunityId}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white px-4 py-2"
+              >
+                <p className="text-sm text-slate-700">
+                  {candidate.title} — {candidate.provider}{' '}
+                  <span className="text-xs text-slate-400">(missed {candidate.missCount}x)</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleArchive(candidate.opportunityId, 'Confirmed stale via check')}
+                  className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
+                >
+                  Archive
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <AddOpportunityForm path={path} onSubmit={handleAddOpportunity} />
 
@@ -162,7 +251,12 @@ function OpportunityPathViewContent({ path }: { path: OpportunityPath }) {
         ) : (
           <div className="mt-6 space-y-4">
             {visible.map((opportunity) => (
-              <OpportunityRow key={opportunity.id} opportunity={opportunity} onDecide={handleDecide} />
+              <OpportunityRow
+                key={opportunity.id}
+                opportunity={opportunity}
+                onDecide={handleDecide}
+                onArchive={handleArchive}
+              />
             ))}
             {visible.length === 0 && (
               <p className="text-sm text-slate-500">

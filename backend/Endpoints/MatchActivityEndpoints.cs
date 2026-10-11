@@ -4,7 +4,18 @@ using Novira.Backend.Models;
 
 namespace Novira.Backend.Endpoints;
 
-public record MatchActivityResponse(Guid OpportunityId, DateTime AppliedAt);
+public record MatchActivityResponse(
+    Guid OpportunityId,
+    DateTime AppliedAt,
+    // Snapshotted display data — see MatchActivity.cs's own comment for why
+    // this doesn't depend on /matches still returning the opportunity.
+    string OpportunityTitle,
+    string OpportunityProvider,
+    OpportunityPath OpportunityPath,
+    // The one field that's NOT from the snapshot — archiving can happen
+    // *after* a user applied, so this needs a live check against the
+    // opportunity's current status, not a frozen-at-apply-time value.
+    bool IsArchived);
 
 // The "mark as applied" tracker (Architecture.md's "Tier 2 services" — the
 // last remaining piece of the original CV-request flow). Deliberately the
@@ -31,7 +42,14 @@ public static class MatchActivityEndpoints
                 .Where(a => a.UserId == user.Id)
                 .ToListAsync();
 
-            return Results.Ok(activity.Select(a => new MatchActivityResponse(a.OpportunityId, a.AppliedAt)));
+            var opportunityIds = activity.Select(a => a.OpportunityId).ToList();
+            var archivedIds = (await db.Opportunities
+                .Where(o => opportunityIds.Contains(o.Id) && o.Status == OpportunityStatus.Archived)
+                .Select(o => o.Id)
+                .ToListAsync())
+                .ToHashSet();
+
+            return Results.Ok(activity.Select(a => ToResponse(a, archivedIds.Contains(a.OpportunityId))));
         });
 
         // Create-or-return-existing, not an error on a repeat call — a
@@ -45,20 +63,29 @@ public static class MatchActivityEndpoints
                 .FirstOrDefaultAsync(a => a.UserId == user.Id && a.OpportunityId == opportunityId);
             if (existing is not null)
             {
-                return Results.Ok(new MatchActivityResponse(existing.OpportunityId, existing.AppliedAt));
+                var isArchived = await db.Opportunities
+                    .AnyAsync(o => o.Id == opportunityId && o.Status == OpportunityStatus.Archived);
+                return Results.Ok(ToResponse(existing, isArchived));
             }
 
-            var opportunityExists = await db.Opportunities.AnyAsync(o => o.Id == opportunityId);
-            if (!opportunityExists)
+            var opportunity = await db.Opportunities.FindAsync(opportunityId);
+            if (opportunity is null)
             {
                 return Results.NotFound();
             }
 
-            var activity = new MatchActivity { UserId = user.Id, OpportunityId = opportunityId };
+            var activity = new MatchActivity
+            {
+                UserId = user.Id,
+                OpportunityId = opportunityId,
+                OpportunityTitle = opportunity.Title,
+                OpportunityProvider = opportunity.Provider,
+                OpportunityPath = opportunity.Path,
+            };
             db.MatchActivities.Add(activity);
             await db.SaveChangesAsync();
 
-            return Results.Ok(new MatchActivityResponse(activity.OpportunityId, activity.AppliedAt));
+            return Results.Ok(ToResponse(activity, opportunity.Status == OpportunityStatus.Archived));
         });
 
         group.MapDelete("/matches/{opportunityId:guid}/applied", async (
@@ -77,4 +104,8 @@ public static class MatchActivityEndpoints
             return Results.Ok(new { removed = true });
         });
     }
+
+    private static MatchActivityResponse ToResponse(MatchActivity activity, bool isArchived) =>
+        new(activity.OpportunityId, activity.AppliedAt,
+            activity.OpportunityTitle, activity.OpportunityProvider, activity.OpportunityPath, isArchived);
 }

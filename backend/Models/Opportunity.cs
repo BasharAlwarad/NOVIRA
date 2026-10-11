@@ -6,11 +6,22 @@ public enum OpportunityPath
     Ausbildung,
 }
 
+// Archived appended 2026-10-11, same append-only discipline as
+// OpportunitySource below (Postgres stores this as a raw integer) — a
+// listing the source has removed (or the admin has manually retired),
+// distinct from Denied (never should have been shown) or Pending (not yet
+// reviewed). Deliberately excluded from every matching path the exact same
+// way Pending/Denied already are (all three query sites filter
+// Status == Approved), so a listing going Archived needs zero changes to
+// MatchingService itself. Never deleted — MatchActivity/CvRequest rows
+// referencing it (Restrict-on-delete FKs, see their own comments) must keep
+// resolving against real historical data, not a vanished row.
 public enum OpportunityStatus
 {
     Pending,
     Approved,
     Denied,
+    Archived,
 }
 
 // AiResearch appended at the end (2026-08-29) — Postgres stores this column
@@ -118,4 +129,20 @@ public class Opportunity
     public OpportunityStatus Status { get; set; } = OpportunityStatus.Pending;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ReviewedAt { get; set; }
+
+    // Archiving (built 2026-10-11) — see OpportunityStatus.Archived's own
+    // comment for why this exists instead of deletion.
+    public DateTime? ArchivedAt { get; set; }
+    public string? ArchiveReason { get; set; }
+
+    // The Bundesagentur stale-check's own counter (OpportunitySyncService.cs)
+    // — consecutive times this listing's SourceRef was absent from a fresh
+    // re-search. Flags a candidate for admin confirmation at 2, rather than
+    // auto-archiving on a single miss, since the search API only returns
+    // "its largest, most recent page" (see BundesagenturJobsucheClient's own
+    // comment) — a still-live listing can genuinely be absent from one
+    // check just by not being in that page, not because it's actually gone.
+    // Reset to 0 the moment a listing is found again. Always 0 for
+    // non-Bundesagentur rows — nothing else sets it.
+    public int StaleCheckMissCount { get; set; }
 }

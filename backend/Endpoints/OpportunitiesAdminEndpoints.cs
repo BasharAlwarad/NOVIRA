@@ -26,9 +26,13 @@ public record OpportunityResponse(
     DateOnly? ApplicationDeadline,
     OpportunityStatus Status,
     DateTime CreatedAt,
-    DateTime? ReviewedAt);
+    DateTime? ReviewedAt,
+    DateTime? ArchivedAt,
+    string? ArchiveReason,
+    int StaleCheckMissCount);
 
 public record UpdateOpportunityStatusRequest(OpportunityStatus Status);
+public record ArchiveOpportunityRequest(string? Reason);
 
 // The manual-curation counterpart to OpportunitySyncService — for sources
 // with no API to sync from (currently: all University data). Deliberately
@@ -60,7 +64,8 @@ public static class OpportunitiesAdminEndpoints
         o.Id, o.Title, o.Provider, o.Path, o.Location, o.Description, o.SourceUrl,
         o.Source, o.SourceRef, o.OccupationField, o.RequiredGermanLevel, o.RequiredEnglishLevel,
         o.RequiresCertifiedLanguageProof, o.MinEducationLevel, o.MonthlyCompensationEur,
-        o.TuitionFeeEur, o.StartDate, o.ApplicationDeadline, o.Status, o.CreatedAt, o.ReviewedAt);
+        o.TuitionFeeEur, o.StartDate, o.ApplicationDeadline, o.Status, o.CreatedAt, o.ReviewedAt,
+        o.ArchivedAt, o.ArchiveReason, o.StaleCheckMissCount);
 
     public static void MapOpportunitiesAdminEndpoints(this IEndpointRouteBuilder app)
     {
@@ -122,8 +127,48 @@ public static class OpportunitiesAdminEndpoints
                 return Results.NotFound();
             }
 
+            // Reverting out of Archived (e.g. an admin correcting a mistaken
+            // archive) needs its archive metadata cleared too — otherwise a
+            // now-Approved opportunity would still show a stale "Archived
+            // at .../reason ..." in the admin UI, even though it's live again.
+            if (opportunity.Status == OpportunityStatus.Archived)
+            {
+                opportunity.ArchivedAt = null;
+                opportunity.ArchiveReason = null;
+                opportunity.StaleCheckMissCount = 0;
+            }
+
             opportunity.Status = request.Status;
             opportunity.ReviewedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            return Results.Ok(ToResponse(opportunity));
+        });
+
+        // Retires a listing without deleting it — see OpportunityStatus.
+        // Archived's own comment for why deletion was never the right move
+        // (MatchActivity/CvRequest have Restrict-on-delete FKs specifically
+        // so a user's history survives this). Only reachable from Approved —
+        // archiving something Pending/Denied isn't a meaningful action,
+        // since neither was ever live for matching in the first place.
+        group.MapPost("/{id:guid}/archive", async (Guid id, ArchiveOpportunityRequest request, AppDbContext db) =>
+        {
+            var opportunity = await db.Opportunities.FindAsync(id);
+            if (opportunity is null)
+            {
+                return Results.NotFound();
+            }
+
+            if (opportunity.Status != OpportunityStatus.Approved)
+            {
+                return Results.BadRequest(new { message = "Only an Approved opportunity can be archived." });
+            }
+
+            opportunity.Status = OpportunityStatus.Archived;
+            opportunity.ArchivedAt = DateTime.UtcNow;
+            opportunity.ArchiveReason = string.IsNullOrWhiteSpace(request.Reason)
+                ? "Manually archived by admin"
+                : request.Reason.Trim();
             await db.SaveChangesAsync();
 
             return Results.Ok(ToResponse(opportunity));
@@ -136,6 +181,16 @@ public static class OpportunitiesAdminEndpoints
         {
             var added = await syncService.SyncAusbildungAsync();
             return Results.Ok(new { added });
+        });
+
+        // Flags *candidates* for archiving, never archives automatically —
+        // see OpportunitySyncService.CheckStaleAusbildungAsync's own comment
+        // for why a single miss (or even the bulk re-search itself) isn't a
+        // reliable enough signal to act on without a human confirming.
+        group.MapPost("/check-stale-ausbildung", async (OpportunitySyncService syncService) =>
+        {
+            var result = await syncService.CheckStaleAusbildungAsync();
+            return Results.Ok(new { checkedCount = result.Checked, candidates = result.Candidates });
         });
 
         // AI-assisted University sourcing (built 2026-08-29) — the

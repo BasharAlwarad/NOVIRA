@@ -16,4 +16,15 @@ public class MatchActivity
     public required Guid UserId { get; set; }
     public required Guid OpportunityId { get; set; }
     public DateTime AppliedAt { get; set; } = DateTime.UtcNow;
+
+    // Snapshotted at mark-applied time, not joined live — same reasoning as
+    // CvRequest's own OpportunityTitle/Provider snapshot (built 2026-10-11,
+    // for the opportunity-archiving feature): once an opportunity is
+    // archived, /matches stops returning it at all (it's filtered to
+    // Status == Approved, same as every other matching path), so this row
+    // needs its own display data to keep showing up in the user's "Applied"
+    // history instead of silently losing its title/provider/path.
+    public required string OpportunityTitle { get; set; }
+    public required string OpportunityProvider { get; set; }
+    public required OpportunityPath OpportunityPath { get; set; }
 }

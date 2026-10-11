@@ -15,7 +15,11 @@
 
 # next.js
 /.next/
+/.next-verify/
 /out/
+
+# ad-hoc browser verification scripts (see CLAUDE.md's "Browser verification")
+/verify/
 
 # production
 /build

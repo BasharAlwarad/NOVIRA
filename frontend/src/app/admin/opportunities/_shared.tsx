@@ -25,6 +25,7 @@ export const STATUS_STYLES: Record<Opportunity['status'], string> = {
   Pending: 'bg-amber-50 text-amber-700',
   Approved: 'bg-emerald-50 text-emerald-700',
   Denied: 'bg-red-50 text-red-700',
+  Archived: 'bg-slate-100 text-slate-500',
 };
 
 // "mechatronics-technician" -> "Mechatronics Technician". Good enough to
@@ -82,10 +83,15 @@ export function Chip({ children }: { children: React.ReactNode }) {
 export function OpportunityRow({
   opportunity,
   onDecide,
+  onArchive,
 }: {
   opportunity: Opportunity;
   onDecide: (id: string, status: 'Approved' | 'Denied') => void;
+  onArchive?: (id: string, reason: string | undefined) => void;
 }) {
+  const [archiving, setArchiving] = useState(false);
+  const [archiveReasonInput, setArchiveReasonInput] = useState('');
+
   const compensationOrTuition =
     opportunity.monthlyCompensationEur != null
       ? `${formatEur(opportunity.monthlyCompensationEur)}/month`
@@ -153,10 +159,22 @@ export function OpportunityRow({
             AI-researched — verify source link
           </span>
         )}
+        {opportunity.status === 'Approved' && opportunity.staleCheckMissCount >= 2 && (
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+            Flagged stale — missed {opportunity.staleCheckMissCount}x, not yet confirmed
+          </span>
+        )}
       </div>
 
       {factsLine.length > 0 && (
         <p className="mt-2 text-xs text-slate-500">{factsLine.join(' · ')}</p>
+      )}
+
+      {opportunity.status === 'Archived' && (
+        <p className="mt-2 text-xs text-slate-500">
+          Archived {opportunity.archivedAt ? formatDate(opportunity.archivedAt) : ''}
+          {opportunity.archiveReason ? ` — ${opportunity.archiveReason}` : ''}
+        </p>
       )}
 
       {opportunity.sourceUrl && (
@@ -186,6 +204,52 @@ export function OpportunityRow({
           >
             Deny
           </button>
+        </div>
+      )}
+
+      {/* Retires a listing without deleting it — see OpportunityStatus.Archived's
+          own comment in Opportunity.cs. Only offered on Approved rows, same
+          precondition the backend enforces. A user's own "applied"/"CV
+          requested" history for this listing survives via the snapshot
+          fields on MatchActivity/CvRequest, so archiving is always safe. */}
+      {opportunity.status === 'Approved' && onArchive && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          {archiving ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                placeholder="Reason (optional)"
+                value={archiveReasonInput}
+                onChange={(e) => setArchiveReasonInput(e.target.value)}
+                className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-900 focus:border-slate-400 focus:bg-white focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  onArchive(opportunity.id, archiveReasonInput.trim() || undefined);
+                  setArchiving(false);
+                  setArchiveReasonInput('');
+                }}
+                className="rounded-full bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
+              >
+                Confirm archive
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchiving(false)}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setArchiving(true)}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Archive (no longer available from source)
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -475,9 +539,9 @@ export function PathTabs() {
   );
 }
 
-export type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Denied';
+export type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Denied' | 'Archived';
 
-const STATUS_FILTERS: StatusFilter[] = ['All', 'Pending', 'Approved', 'Denied'];
+const STATUS_FILTERS: StatusFilter[] = ['All', 'Pending', 'Approved', 'Denied', 'Archived'];
 
 // Backed by a URL search param (?status=), not local component state, so a
 // filtered view is bookmarkable/shareable and survives a page refresh —
@@ -523,5 +587,6 @@ export function computeStatusCounts(opportunities: Opportunity[]): Record<Status
     Pending: opportunities.filter((o) => o.status === 'Pending').length,
     Approved: opportunities.filter((o) => o.status === 'Approved').length,
     Denied: opportunities.filter((o) => o.status === 'Denied').length,
+    Archived: opportunities.filter((o) => o.status === 'Archived').length,
   };
 }

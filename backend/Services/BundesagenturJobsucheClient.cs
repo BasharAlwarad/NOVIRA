@@ -55,4 +55,32 @@ public class BundesagenturJobsucheClient(HttpClient httpClient)
 
         return parsed?.Ergebnisliste ?? [];
     }
+
+    // Targeted free-text search ("was" = a standard keyword-search param on
+    // this API, distinct from "arbeitgeber" which requires an exact facet
+    // value, not a substring — confirmed live 2026-10-11: "arbeitgeber=Marretho"
+    // returned 0 results for a real employer, "was=Marretho" correctly found
+    // both of their real postings). Used for the per-listing stale check
+    // below instead of a blind nationwide page — the nationwide search has
+    // 170k+ total results and only ever returns its "largest, most recent"
+    // 200, so a specific already-synced listing (from a run weeks/months
+    // ago) will essentially always be absent from that page regardless of
+    // whether it's actually still live, making it useless as a per-listing
+    // signal.
+    public async Task<List<JobsucheListing>> SearchAusbildungByKeywordAsync(
+        string keyword,
+        int size = 25,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.GetAsync(
+            $"jobboerse/jobsuche-service/pc/v6/jobs?angebotsart=4&was={Uri.EscapeDataString(keyword)}&page=1&size={size}",
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var parsed = JsonSerializer.Deserialize<JobsucheSearchResponse>(body, JsonOptions);
+
+        return parsed?.Ergebnisliste ?? [];
+    }
 }

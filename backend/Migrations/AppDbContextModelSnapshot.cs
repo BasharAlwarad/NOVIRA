@@ -266,6 +266,17 @@ namespace Novira.Backend.Migrations
                     b.Property<Guid>("OpportunityId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("OpportunityPath")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OpportunityProvider")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OpportunityTitle")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
@@ -330,6 +341,12 @@ namespace Novira.Backend.Migrations
                     b.Property<DateOnly?>("ApplicationDeadline")
                         .HasColumnType("date");
 
+                    b.Property<string>("ArchiveReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -375,6 +392,9 @@ namespace Novira.Backend.Migrations
 
                     b.Property<string>("SourceUrl")
                         .HasColumnType("text");
+
+                    b.Property<int>("StaleCheckMissCount")
+                        .HasColumnType("integer");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
