@@ -878,6 +878,69 @@ function PurchasesSection({
   );
 }
 
+// Tabs — mirrors /account's own ProfileTabs pattern (point 6 of the
+// 2026-10-04 UI/UX hardening pass), applied to the page that needed it most:
+// this page used to stack ~9 full sections (self-reported profile, verified
+// data, plan/payments, CV intake, applied matches, data consistency,
+// documents — each with a full ~12-field AI review block — message history,
+// a compose form, and account deletion) in one unbroken scroll. A real
+// account with just 3 documents and ~30 messages already made this a very
+// long page; it only gets longer as a user accumulates more of either.
+// Overview bundles the "read the current state" sections (self-reported,
+// verified, plan, data-consistency check) since those are judged together,
+// not worked through in sequence the way Documents/Messages are.
+type DetailTab = 'overview' | 'documents' | 'cv' | 'messages' | 'danger';
+
+function UserDetailTabs({
+  tab,
+  onChange,
+  documentCount,
+  pendingDocumentCount,
+  messageCount,
+}: {
+  tab: DetailTab;
+  onChange: (tab: DetailTab) => void;
+  documentCount: number;
+  pendingDocumentCount: number;
+  messageCount: number;
+}) {
+  const tabs: { key: DetailTab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'documents', label: `Documents (${documentCount})` },
+    { key: 'cv', label: 'CV & applications' },
+    { key: 'messages', label: `Messages (${messageCount})` },
+    { key: 'danger', label: 'Danger zone' },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tabs.map(({ key, label }) => {
+        const active = key === tab;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={`relative rounded-full px-4 py-2 text-sm font-semibold transition ${
+              active ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {label}
+            {key === 'documents' && pendingDocumentCount > 0 && (
+              <span
+                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white"
+                aria-label={`${pendingDocumentCount} pending review`}
+              >
+                {pendingDocumentCount}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdminUserProfilePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -888,6 +951,7 @@ export default function AdminUserProfilePage() {
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recomputing, setRecomputing] = useState(false);
+  const [tab, setTab] = useState<DetailTab>('overview');
 
   const loadUser = useCallback(async () => {
     setError(null);
@@ -1034,124 +1098,146 @@ export default function AdminUserProfilePage() {
           </div>
         </div>
 
-        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-900">Self-reported profile</h2>
-          <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-600 sm:grid-cols-2">
-            <div>
-              <dt className="inline font-semibold">Country: </dt>
-              <dd className="inline">{user.country ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Age: </dt>
-              <dd className="inline">{user.age ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Highest education: </dt>
-              <dd className="inline">{user.highestEducation ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Occupation field: </dt>
-              <dd className="inline">{user.occupationField ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Desired path: </dt>
-              <dd className="inline">{user.desiredPath ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">German level: </dt>
-              <dd className="inline">{user.germanLevel ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">English level: </dt>
-              <dd className="inline">{user.englishLevel ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Passport status: </dt>
-              <dd className="inline">{user.passportStatus ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Financial situation: </dt>
-              <dd className="inline">{user.financialSituation ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="inline font-semibold">Start timeline: </dt>
-              <dd className="inline">{user.startTimeline ?? '—'}</dd>
-            </div>
-          </dl>
-        </section>
+        <div className="mt-6">
+          <UserDetailTabs
+            tab={tab}
+            onChange={setTab}
+            documentCount={user.documents.length}
+            pendingDocumentCount={user.documents.filter((d) => d.reviewStatus === 'PendingReview').length}
+            messageCount={user.messages.length}
+          />
+        </div>
 
-        {(() => {
-          const allVerifiedFields: [string, string | null][] = [
-            ['Full name', user.verifiedFullName],
-            ['Date of birth', user.verifiedDateOfBirth],
-            ['Nationality', user.verifiedNationality],
-            ['Passport number', user.verifiedPassportNumber],
-            ['Passport status', user.verifiedPassportStatus],
-            ['Passport expiry', user.verifiedPassportExpiryDate],
-            ['Highest education', user.verifiedHighestEducation],
-            ['Field of study', user.verifiedFieldOfStudy],
-            ['Occupation field', user.verifiedOccupationField],
-            ['German level', user.verifiedGermanLevel],
-            ['English level', user.verifiedEnglishLevel],
-            ['Certified language proof', user.verifiedHasCertifiedLanguageProof ? 'Yes' : null],
-          ];
-          const verifiedFields = allVerifiedFields.filter(([, value]) => value !== null);
-
-          if (verifiedFields.length === 0) {
-            return null;
-          }
-
-          return (
-            <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-emerald-900">Verified from documents</h2>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                  Confirmed
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-emerald-800">
-                Written when you Approved a document that contained this data.
-              </p>
-              <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-emerald-900 sm:grid-cols-2">
-                {verifiedFields.map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="inline font-semibold">{label}: </dt>
-                    <dd className="inline">{value}</dd>
-                  </div>
-                ))}
+        {tab === 'overview' && (
+          <>
+            <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
+              <h2 className="text-sm font-semibold text-slate-900">Self-reported profile</h2>
+              <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                <div>
+                  <dt className="inline font-semibold">Country: </dt>
+                  <dd className="inline">{user.country ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Age: </dt>
+                  <dd className="inline">{user.age ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Highest education: </dt>
+                  <dd className="inline">{user.highestEducation ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Occupation field: </dt>
+                  <dd className="inline">{user.occupationField ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Desired path: </dt>
+                  <dd className="inline">{user.desiredPath ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">German level: </dt>
+                  <dd className="inline">{user.germanLevel ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">English level: </dt>
+                  <dd className="inline">{user.englishLevel ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Passport status: </dt>
+                  <dd className="inline">{user.passportStatus ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Financial situation: </dt>
+                  <dd className="inline">{user.financialSituation ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">Start timeline: </dt>
+                  <dd className="inline">{user.startTimeline ?? '—'}</dd>
+                </div>
               </dl>
             </section>
-          );
-        })()}
 
-        <PurchasesSection effectiveTier={user.effectiveTier} purchases={user.purchases} />
+            {(() => {
+              const allVerifiedFields: [string, string | null][] = [
+                ['Full name', user.verifiedFullName],
+                ['Date of birth', user.verifiedDateOfBirth],
+                ['Nationality', user.verifiedNationality],
+                ['Passport number', user.verifiedPassportNumber],
+                ['Passport status', user.verifiedPassportStatus],
+                ['Passport expiry', user.verifiedPassportExpiryDate],
+                ['Highest education', user.verifiedHighestEducation],
+                ['Field of study', user.verifiedFieldOfStudy],
+                ['Occupation field', user.verifiedOccupationField],
+                ['German level', user.verifiedGermanLevel],
+                ['English level', user.verifiedEnglishLevel],
+                ['Certified language proof', user.verifiedHasCertifiedLanguageProof ? 'Yes' : null],
+              ];
+              const verifiedFields = allVerifiedFields.filter(([, value]) => value !== null);
 
-        <IntakeSection intake={user.intake} />
+              if (verifiedFields.length === 0) {
+                return null;
+              }
 
-        <AppliedMatchesSection appliedMatches={user.appliedMatches} />
+              return (
+                <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-emerald-900">Verified from documents</h2>
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      Confirmed
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    Written when you Approved a document that contained this data.
+                  </p>
+                  <dl className="mt-3 grid grid-cols-1 gap-2 text-xs text-emerald-900 sm:grid-cols-2">
+                    {verifiedFields.map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="inline font-semibold">{label}: </dt>
+                        <dd className="inline">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              );
+            })()}
 
-        <DataConsistencySection user={user} />
+            <PurchasesSection effectiveTier={user.effectiveTier} purchases={user.purchases} />
 
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-900">Documents</h2>
-          <div className="mt-3 space-y-4">
-            {user.documents.length === 0 ? (
-              <p className="text-sm text-slate-500">No documents uploaded yet.</p>
-            ) : (
-              user.documents.map((document) => (
-                <DocumentCard key={document.id} document={document} onReview={handleReview} />
-              ))
-            )}
-          </div>
-        </section>
+            <DataConsistencySection user={user} />
+          </>
+        )}
 
-        <MessageHistorySection messages={user.messages} adminKey={adminKey} userId={userId} />
+        {tab === 'documents' && (
+          <section className="mt-6">
+            <h2 className="text-sm font-semibold text-slate-900">Documents</h2>
+            <div className="mt-3 space-y-4">
+              {user.documents.length === 0 ? (
+                <p className="text-sm text-slate-500">No documents uploaded yet.</p>
+              ) : (
+                user.documents.map((document) => (
+                  <DocumentCard key={document.id} document={document} onReview={handleReview} />
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
-        <section className="mt-6">
-          <MessageForm onSend={handleSendMessage} />
-        </section>
+        {tab === 'cv' && (
+          <>
+            <IntakeSection intake={user.intake} />
+            <AppliedMatchesSection appliedMatches={user.appliedMatches} />
+          </>
+        )}
 
-        <DeleteUserSection onDelete={handleDeleteUser} />
+        {tab === 'messages' && (
+          <>
+            <MessageHistorySection messages={user.messages} adminKey={adminKey} userId={userId} />
+            <section className="mt-6">
+              <MessageForm onSend={handleSendMessage} />
+            </section>
+          </>
+        )}
+
+        {tab === 'danger' && <DeleteUserSection onDelete={handleDeleteUser} />}
       </div>
     </main>
   );
