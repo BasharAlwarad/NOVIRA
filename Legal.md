@@ -49,7 +49,27 @@ This is triggered by the product's basic mechanics (an Egyptian user's email/doc
 
 ---
 
-## 4. Where this fits in the bigger picture
+## 4. Tier 3's fee structure — a second, distinct legal question (found 2026-10-12, decided 2026-10-12)
+
+Separate from the RDG/Vollmacht liability question above — this is about whether NOVIRA is even allowed to charge the *user* for "apply on your behalf" at all, and the answer genuinely differs by path. Found while researching how comparable companies structure this tier; not something §3 above already considered and dismissed.
+
+- **Ausbildung path**: **§296a SGB III** (*Ausbildungsvermittlung* — apprenticeship placement) appears to bar charging the *applicant* any fee for being placed into an apprenticeship — only the employer may be charged. Unlike general job placement (next bullet), there's no capped-and-allowed exception for the applicant side. Real-world precedent confirms this shapes the whole industry: **Triple Win** (the GIZ/Bundesagentur-run international nurse recruitment program to Germany) runs on an explicit "employer pays" principle specifically because of this — the nurse pays nothing for placement; the employer pays ~€7,900 per placement. Private Ausbildung-placement agencies researched (Acaluna) keep candidate-facing fees to a flat post-placement logistics charge (~€200 for visa/departure help), not a placement fee.
+- **University path**: not employment or Ausbildung placement, so SGB III doesn't apply — charging the student is an established, legal business (education agents, *Studienplatzvermittler*). But a recent BGH ruling ([I ZR 160/24](https://www.lto.de/recht/nachrichten/n/izr16024-bgh-bundesgerichtshof-erfolgshonorar-bei-studienplatzzusage-studienplatzvermittler), 2025/2026) struck down a fee that became due on an admission *offer* rather than actual *enrollment* — ruling this unfairly shifted the broker's own risk onto the student. A success-fee model is fine here, but only if "success" means the student actually enrolling, not getting an offer.
+- **General employment placement** (if NOVIRA ever expands past Ausbildung/University into direct job placement): §296 SGB III allows a capped (€2,000), success-only, written-contract fee from the applicant — no advance payment allowed — but placement into a marginal/mini-job can't be charged to the applicant at all, and au-pair placement is capped at €150.
+
+**A genuinely different kind of risk than the Vollmacht question above.** The RDG/Vollmacht risk is liability-shaped (insurable, mitigated by the Gewerbeanmeldung + professional liability insurance already decided in §3). This one looks structural instead: a §296a violation appears to void the fee agreement itself (per the general SGB III penalty pattern — see §297 SGB III), not create a claim an insurer could cover. Wording discipline alone doesn't fix it either, the same "substance, not labeling" point as §1 — the issue is what the fee is *for*, not what it's called.
+
+The clean, well-precedented alternative — matching what Triple Win and Acaluna both already do, not a NOVIRA invention — would be to not charge the user specifically for the Ausbildung-placement function (either reframe that side as flat document-prep help, or charge the employer once a placement succeeds, further out).
+
+**Decision, 2026-10-12: proceeding with the identical €500+€1,000 structure across both paths anyway, as a deliberate, accepted risk — same treatment the Vollmacht question got in §3, not an oversight.** Flagged clearly once, with the Triple Win/Acaluna alternative laid out, before the founder made the call. No new mitigation adopted specifically for this risk beyond what §3 already covers (the Gewerbeanmeldung and liability insurance address the Vollmacht/RDG side, not this one — see the "void agreement, not an insurable claim" distinction above, which still stands). **This is explicitly tracked as open exposure, not a resolved question** — worth a real lawyer's confirmation before Tier 3's Ausbildung-path pricing goes live with real users, same as every other item in this file.
+
+**None of this is legal advice** — same discipline as §3: the founder's own considered risk decision, documented here so it's explicit and trackable rather than something that quietly happened.
+
+Sources: [§ 296 SGB III — dejure.org](https://dejure.org/gesetze/SGB_III/296.html), [§ 296a SGB III — JuraForum](https://www.juraforum.de/gesetze/sgb-3/296a-verguetungen-bei-ausbildungsvermittlung), [Triple Win Program](https://triple-win-programm.de/en/), [Triple Win factsheet (Bundesagentur für Arbeit)](https://www.arbeitsagentur.de/vor-ort/datei/triple-win-factsheet-englisch_ba066707.pdf), [Acaluna — Recruitment Agencies Germany for Foreigners](https://acaluna.com/en/recruitment-agencies-germany/), [LTO — BGH prüft Vertragsmodell von Studienplatzvermittlerin](https://www.lto.de/recht/nachrichten/n/izr16024-bgh-bundesgerichtshof-erfolgshonorar-bei-studienplatzzusage-studienplatzvermittler). Researched 2026-10-12 — re-verify before treating as final, same caveat as every other sourced section in this file.
+
+---
+
+## 5. Where this fits in the bigger picture
 
 - `Plan.md` §12 (Key risks recap) items 1, 2, and 5 restate the RDG/PDPL/GDPR-hosting risks above in the context of the full risk list (trust deficit, AI reliability, solo-founder capacity, etc.) — read there for how these sit alongside the non-legal risks, not duplicated here.
 - `Plan.md` §6 (Company structure) — the UG/Musterprotokoll plan this file's Tier 3 section treats as "not yet, but the eventual fix."

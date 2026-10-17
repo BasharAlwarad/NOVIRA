@@ -12,8 +12,8 @@ import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
 import type { IntakeStatus } from '@/lib/contracts/intake';
 import type { PurchaseTier } from '@/lib/contracts/purchases';
-import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
-import { Tier2UpsellCard } from '@/components/tier2-upsell';
+import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
+import { Tier3RequestCard } from '@/components/tier3-request';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -368,29 +368,10 @@ function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
       <h2 className="text-sm font-semibold text-slate-900">Your plan</h2>
       <p className="mt-1 text-sm font-medium text-slate-700">{TIER_LABELS[effectiveTier]}</p>
 
-      {effectiveTier === 'Free' && isTier1PurchaseEnabled() && (
-        <div className="mt-4 rounded-2xl bg-emerald-50/60 p-4">
-          <p className="text-sm font-semibold text-emerald-900">
-            Unlock all your matches — €{TIER1_PRICE_EUR}
-          </p>
-          <p className="mt-1 text-sm leading-6 text-emerald-800">
-            See every matching opportunity (not just one), plus a quick human review of your
-            profile.
-          </p>
-          <a
-            href={getTier1PaymentLink()}
-            className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-          >
-            Unlock — €{TIER1_PRICE_EUR}
-          </a>
-        </div>
-      )}
-
-      {effectiveTier === 'Tier1' && (
-        <div className="mt-4">
-          <Tier2UpsellCard />
-        </div>
-      )}
+      <div className="mt-4 space-y-3">
+        <TierUpgradeOptions effectiveTier={effectiveTier} />
+        <Tier3RequestCard effectiveTier={effectiveTier} />
+      </div>
     </section>
   );
 }

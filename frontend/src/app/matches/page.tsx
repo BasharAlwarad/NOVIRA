@@ -18,7 +18,8 @@ import {
   isApplicationHelpEnabled,
 } from '@/lib/application-help';
 import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
-import { Tier2UpsellCard } from '@/components/tier2-upsell';
+import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
+import { Tier3RequestCard } from '@/components/tier3-request';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -993,6 +994,10 @@ function MatchesPageContent() {
               ) : (
                 <>
                   <UnlockBanner blurredCount={state.blurredCount} />
+                  <div className="mt-4 space-y-3">
+                    <TierUpgradeOptions effectiveTier={state.effectiveTier} includeTier1={false} />
+                    <Tier3RequestCard effectiveTier={state.effectiveTier} />
+                  </div>
                   <div className="mt-4">
                     <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
                   </div>
@@ -1022,11 +1027,10 @@ function MatchesPageContent() {
 
           {state.status === 'loaded' && state.hasProfile && state.effectiveTier !== 'Free' && (
             <>
-              {state.effectiveTier === 'Tier1' && (
-                <div className="mb-6">
-                  <Tier2UpsellCard />
-                </div>
-              )}
+              <div className="mb-6 space-y-3">
+                <TierUpgradeOptions effectiveTier={state.effectiveTier} />
+                <Tier3RequestCard effectiveTier={state.effectiveTier} />
+              </div>
 
               <div className="mb-6">
                 <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />

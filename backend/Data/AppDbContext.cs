@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MatchActivity> MatchActivities => Set<MatchActivity>();
     public DbSet<AccountDeletionToken> AccountDeletionTokens => Set<AccountDeletionToken>();
     public DbSet<AccountDeletionLog> AccountDeletionLogs => Set<AccountDeletionLog>();
+    public DbSet<Tier3Case> Tier3Cases => Set<Tier3Case>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -106,5 +107,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // No FK to User — AccountDeletionLog is deliberately independent,
         // see its own comment for why (it must outlive the row it's about).
+
+        // One row per user — enforced by a unique index, same "at most one"
+        // assumption IntakeProfile's own unique index already encodes (Tier
+        // 3 is a single ongoing case per user, not a per-opportunity action).
+        modelBuilder.Entity<Tier3Case>(entity =>
+        {
+            entity.HasIndex(c => c.UserId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict, same reasoning as CvRequest/MatchActivity's FKs
+            // above — no delete endpoint for Opportunity today, but a case's
+            // record of what it's actually pursuing shouldn't silently
+            // vanish as a side effect of something else.
+            entity.HasOne<Opportunity>().WithMany().HasForeignKey(c => c.TargetOpportunityId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }

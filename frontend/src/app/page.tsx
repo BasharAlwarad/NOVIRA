@@ -1,7 +1,7 @@
 import { Hero } from '@/components/hero';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
-import { TIER1_PRICE_EUR, TIER2_PRICE_EUR } from '@/lib/tier-pricing';
+import { TIER1_PRICE_EUR, TIER2_PRICE_EUR, TIER3_PRICE_EUR } from '@/lib/tier-pricing';
 
 // Rewritten 2026-10-04 (point 1 of the UI/UX hardening pass) — the previous
 // copy here was generic "Study/Work/Information" placeholder text written
@@ -21,7 +21,7 @@ export default async function Home() {
 
         <section
           id="services"
-          className="mt-6 grid gap-4 rounded-4xl border border-slate-200 bg-white px-6 py-6 shadow-xl shadow-slate-200/60 md:grid-cols-3"
+          className="mt-6 grid gap-4 rounded-4xl border border-slate-200 bg-white px-6 py-6 shadow-xl shadow-slate-200/60 sm:grid-cols-2 lg:grid-cols-4"
         >
           <div className="space-y-3 rounded-3xl bg-slate-50 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
@@ -59,6 +59,19 @@ export default async function Home() {
             <p className="text-sm leading-6 text-slate-600">
               An AI-drafted CV and cover letter for any match, real-time chat
               with our team, and a way to track what you&apos;ve applied to.
+            </p>
+          </div>
+          <div className="space-y-3 rounded-3xl bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+              Tier 3 — €{TIER3_PRICE_EUR}
+            </p>
+            <h2 className="text-xl font-bold text-slate-900">
+              Get full-service help
+            </h2>
+            <p className="text-sm leading-6 text-slate-600">
+              We help you complete and submit your application, start to
+              finish, under a signed agreement — after a real conversation
+              with our team first, not an instant purchase.
             </p>
           </div>
         </section>

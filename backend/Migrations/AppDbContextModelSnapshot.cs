@@ -481,6 +481,46 @@ namespace Novira.Backend.Migrations
                     b.ToTable("Sessions");
                 });
 
+            modelBuilder.Entity("Novira.Backend.Models.Tier3Case", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdminNotes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TargetOpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetOpportunityProvider")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TargetOpportunityTitle")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TargetOpportunityId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("Tier3Cases");
+                });
+
             modelBuilder.Entity("Novira.Backend.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -759,6 +799,20 @@ namespace Novira.Backend.Migrations
 
             modelBuilder.Entity("Novira.Backend.Models.Session", b =>
                 {
+                    b.HasOne("Novira.Backend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Novira.Backend.Models.Tier3Case", b =>
+                {
+                    b.HasOne("Novira.Backend.Models.Opportunity", null)
+                        .WithMany()
+                        .HasForeignKey("TargetOpportunityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Novira.Backend.Models.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")

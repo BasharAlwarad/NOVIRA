@@ -1,0 +1,11 @@
+{
+  "name": "novira-dev",
+  "private": true,
+  "description": "Root-level dev convenience only — frontend/ and backend/ are still built, run, and deployed independently (see CLAUDE.md). This just starts both local dev servers from one command instead of two terminals.",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"cd backend && dotnet run\" \"cd frontend && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

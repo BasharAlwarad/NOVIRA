@@ -17,6 +17,14 @@ const TIER2_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK ?? '';
 export const TIER1_PRICE_EUR = 30;
 export const TIER2_PRICE_EUR = 150;
 
+// Tier 3 has no payment link — it isn't self-checkout (Monetization-
+// Strategy.md §4.1 item 4: a real conversation happens before any payment),
+// so there's no isTier3PurchaseEnabled()/getTier3PaymentLink() pair here.
+// These are display-only figures for /#services and the request flow's own
+// copy. €500 upfront + €1,000 once an opportunity is secured.
+export const TIER3_PRICE_EUR = 1500;
+export const TIER3_UPFRONT_EUR = 500;
+
 export function isTier1PurchaseEnabled(): boolean {
   return TIER1_PAYMENT_LINK.length > 0;
 }

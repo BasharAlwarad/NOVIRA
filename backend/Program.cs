@@ -173,6 +173,8 @@ app.MapIntakeEndpoints();
 app.MapCvRequestsEndpoints();
 app.MapCvRequestsAdminEndpoints();
 app.MapCvReferenceSettingsAdminEndpoints();
+app.MapTier3Endpoints();
+app.MapTier3AdminEndpoints();
 app.MapHub<MessagesHub>("/hubs/messages");
 
 app.MapPost("/leads", async (
