@@ -17,6 +17,7 @@ The two apps are built, deployed, and depend on each other not at all — a root
 - **`Matching-Algorithm-Study.md`** — the matching algorithm's own research (real German admission criteria, scoring weights, open tuning questions). Read before changing `lib/assessment-verdict.ts` or `lib/occupation-demand.ts`.
 - **`Monetization-Strategy.md`** — pricing/tier research and the current, evolving revenue design. Read before touching pricing, paid tiers, or B2B outreach.
 - **`Architecture.md`** (split out 2026-09-26) — detailed design and build history per feature. Read the specific section you need.
+- **`Testing.md`** (split out 2026-10-20) — test data/fixtures and methodology: the 10 fake personas seeded in the real database (names, tiers, document states, Tier 3 case stages), and the document-verification pipeline's test-fixture plan. Deliberately kept separate from `Architecture.md` (shipped-feature history) and this file (current phase status) so it doesn't get read every time either of those is touched for something unrelated. Read before adding test personas/fixtures, or touching the 10 personas already seeded.
 
 This file only tracks the short technical version: what phase we're building right now.
 

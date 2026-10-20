@@ -4,6 +4,7 @@ frontend/.next/
 frontend/out/
 frontend/.env.local
 frontend/verify/
+user_fake_documents/
 backend/bin/
 backend/obj/
 .vscode/
