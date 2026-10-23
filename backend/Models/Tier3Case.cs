@@ -73,6 +73,14 @@ public class Tier3Case
     public string? SignedFullName { get; set; }
     public string? SignerIp { get; set; }
 
+    // The €1,000 success fee (build order step 5) — already contractually
+    // agreed to in the signed agreement above (Section 3/4), so no second
+    // signature is needed here, just the payment. Verified through its own
+    // dedicated endpoint, not /purchases/verify-session — see
+    // Architecture.md's "Tier 3 success fee" section for why.
+    public DateTime? SuccessFeeRequestedAt { get; set; }
+    public DateTime? SuccessFeePaidAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 }

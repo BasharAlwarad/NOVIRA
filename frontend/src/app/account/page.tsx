@@ -7,6 +7,7 @@ import { cancelAccountDeletion, fetchMyAccount, NotSignedInError as NoAccountSes
 import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
+import { verifySuccessFeeSession } from '@/lib/api/tier3';
 import { fetchMyIntake } from '@/lib/api/intake';
 import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
@@ -657,6 +658,31 @@ export default function AccountPage() {
         if (account) {
           setState({ status: 'loaded', account });
         }
+      })
+      .catch((err) => {
+        setCheckoutMessage({
+          text: err instanceof Error ? err.message : 'Could not verify your payment.',
+          isError: true,
+        });
+      });
+  }, [router]);
+
+  // The Tier 3 success-fee Payment Link's own redirect — a deliberately
+  // distinct query param (success_fee_session) from the checkout_session
+  // effect above, so the two can never be confused with each other. Doesn't
+  // need to re-fetch the whole account (unlike the tier-unlock case above),
+  // since the success fee doesn't change effectiveTier — only the Tier 3
+  // case itself, which Tier3RequestCard already self-fetches.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('success_fee_session');
+    if (!sessionId) return;
+
+    router.replace('/account');
+
+    verifySuccessFeeSession(sessionId)
+      .then(() => {
+        setCheckoutMessage({ text: 'Success fee payment confirmed — your case is complete.', isError: false });
       })
       .catch((err) => {
         setCheckoutMessage({

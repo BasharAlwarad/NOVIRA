@@ -21,6 +21,8 @@ export interface Tier3Case {
   agreementText: string | null;
   upfrontAmountEur: number | null;
   signedAt: string | null;
+  successFeeRequestedAt: string | null;
+  successFeePaidAt: string | null;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -38,6 +40,8 @@ export interface AdminTier3Case {
   agreementSentAt: string | null;
   upfrontAmountEur: number | null;
   signedAt: string | null;
+  successFeeRequestedAt: string | null;
+  successFeePaidAt: string | null;
   createdAt: string;
   updatedAt: string | null;
 }

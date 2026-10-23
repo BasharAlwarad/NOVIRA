@@ -20,6 +20,8 @@ public record AdminTier3CaseResponse(
     DateTime? AgreementSentAt,
     int? UpfrontAmountEur,
     DateTime? SignedAt,
+    DateTime? SuccessFeeRequestedAt,
+    DateTime? SuccessFeePaidAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
@@ -148,10 +150,52 @@ public static class Tier3AdminEndpoints
 
             return Results.Ok(ToResponse(tier3Case, user.Email));
         });
+
+        // Build order step 5. No new agreement/signature needed here — the
+        // already-signed agreement's own Section 3/4 already states the
+        // €1,000 success fee and what "success" means per path; this just
+        // starts the payment. Only callable once the founder has actually
+        // marked the case Secured, and only once (no duplicate requests).
+        group.MapPost("/{id:guid}/request-success-fee", async (
+            Guid id, AppDbContext db, IHubContext<MessagesHub> hub) =>
+        {
+            var tier3Case = await db.Tier3Cases.FindAsync(id);
+            if (tier3Case is null)
+            {
+                return Results.NotFound();
+            }
+
+            if (tier3Case.Status != Tier3CaseStatus.Secured)
+            {
+                return Results.BadRequest(new { message = "The case must be marked Secured before requesting the success fee." });
+            }
+
+            if (tier3Case.SuccessFeeRequestedAt is not null)
+            {
+                return Results.BadRequest(new { message = "The success fee has already been requested for this case." });
+            }
+
+            var user = await db.Users.FindAsync(tier3Case.UserId);
+            if (user is null)
+            {
+                return Results.BadRequest(new { message = "This case's user account no longer exists." });
+            }
+
+            tier3Case.SuccessFeeRequestedAt = DateTime.UtcNow;
+            tier3Case.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            await MessagesEndpoints.CreateAdminMessageAsync(
+                db, hub, user.Id,
+                "Your opportunity is secured — one last step",
+                $"Congratulations — your application succeeded. The final success fee (€{Tier3PricingCalculator.SuccessFeeEur}) is now due, as agreed in your signed agreement. Pay it on your account page whenever you're ready.");
+
+            return Results.Ok(ToResponse(tier3Case, user.Email));
+        });
     }
 
     private static AdminTier3CaseResponse ToResponse(Tier3Case c, string userEmail) => new(
         c.Id, c.UserId, userEmail, c.Status, c.TargetOpportunityId, c.TargetOpportunityTitle,
         c.TargetOpportunityProvider, c.AdminNotes, c.AgreementSentAt, c.UpfrontAmountEur, c.SignedAt,
-        c.CreatedAt, c.UpdatedAt);
+        c.SuccessFeeRequestedAt, c.SuccessFeePaidAt, c.CreatedAt, c.UpdatedAt);
 }

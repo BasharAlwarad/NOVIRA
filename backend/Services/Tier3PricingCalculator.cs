@@ -16,6 +16,13 @@ public static class Tier3PricingCalculator
     private const int Tier1CreditEur = 30;
     private const int Tier2CreditEur = 150;
 
+    // The second half of Tier3's €1,500 lifetime total — flat, no carry-up
+    // (unlike the upfront amount above), since it's charged once regardless
+    // of path or prior tier. Already contractually agreed to in the signed
+    // agreement's own Section 3/4 — this constant is just what the payment
+    // verification step checks the paid amount against.
+    public const int SuccessFeeEur = 1000;
+
     public static int GetUpfrontAmountEur(IEnumerable<Purchase> purchases)
     {
         var list = purchases as IReadOnlyCollection<Purchase> ?? purchases.ToList();

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AdminUnauthorizedError, listTier3Cases, sendTier3Agreement, updateTier3Case } from '@/lib/api/admin-tier3';
+import {
+  AdminUnauthorizedError,
+  listTier3Cases,
+  requestTier3SuccessFee,
+  sendTier3Agreement,
+  updateTier3Case,
+} from '@/lib/api/admin-tier3';
 import type { AdminTier3Case, Tier3CaseStatus } from '@/lib/contracts/tier3';
 import { useAdminKey } from '@/hooks/useAdminKey';
 
@@ -54,6 +60,7 @@ function CaseCard({
   const [savingNotes, setSavingNotes] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [sendingAgreement, setSendingAgreement] = useState(false);
+  const [requestingSuccessFee, setRequestingSuccessFee] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleStatusChange = async (status: Tier3CaseStatus) => {
@@ -87,6 +94,23 @@ function CaseCard({
       }
     } finally {
       setSendingAgreement(false);
+    }
+  };
+
+  const handleRequestSuccessFee = async () => {
+    setRequestingSuccessFee(true);
+    setError(null);
+    try {
+      const updated = await requestTier3SuccessFee(adminKey, tier3Case.id);
+      onUpdated(updated);
+    } catch (err) {
+      if (err instanceof AdminUnauthorizedError) {
+        clearAdminKey();
+      } else {
+        setError('Failed to request the success fee.');
+      }
+    } finally {
+      setRequestingSuccessFee(false);
     }
   };
 
@@ -180,6 +204,23 @@ function CaseCard({
           {sendingAgreement ? 'Sending…' : 'Send agreement'}
         </button>
       )}
+
+      {tier3Case.status === 'Secured' &&
+        (tier3Case.successFeeRequestedAt ? (
+          <p className="mt-3 text-xs text-slate-500">
+            Success fee requested {formatDateTime(tier3Case.successFeeRequestedAt)}
+            {tier3Case.successFeePaidAt ? `, paid ${formatDateTime(tier3Case.successFeePaidAt)}` : ', not yet paid'}
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={handleRequestSuccessFee}
+            disabled={requestingSuccessFee}
+            className="mt-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {requestingSuccessFee ? 'Sending…' : 'Request success fee'}
+          </button>
+        ))}
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </div>

@@ -21,6 +21,7 @@ export const TIER2_PRICE_EUR = 150;
 // copy. €500 upfront + €1,000 once an opportunity is secured.
 export const TIER3_PRICE_EUR = 1500;
 export const TIER3_UPFRONT_EUR = 500;
+export const TIER3_SUCCESS_FEE_EUR = 1000;
 
 // Tier 3 still isn't self-checkout in the Tier1/2 sense — a Payment Link
 // only ever appears after the founder has sent, and the user has signed,
@@ -41,6 +42,17 @@ export function getTier3PaymentLink(upfrontAmountEur: number): string {
   if (upfrontAmountEur <= 350) return TIER3_PAYMENT_LINK_FROM_TIER2;
   if (upfrontAmountEur <= 470) return TIER3_PAYMENT_LINK_FROM_TIER1;
   return TIER3_PAYMENT_LINK_FROM_FREE;
+}
+
+// The €1,000 success fee (build order step 5) — flat, no carry-up variant
+// (unlike the upfront amount above), so just one static Payment Link.
+// Success-redirect: /account?success_fee_session={CHECKOUT_SESSION_ID} — a
+// deliberately distinct query param from checkout_session/&tier=, so it
+// can't collide with the existing Tier1/2/Tier3-upfront redirect handler.
+const TIER3_SUCCESS_FEE_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER3_SUCCESS_FEE_PAYMENT_LINK ?? '';
+
+export function getTier3SuccessFeePaymentLink(): string {
+  return TIER3_SUCCESS_FEE_PAYMENT_LINK;
 }
 
 export function isTier1PurchaseEnabled(): boolean {

@@ -56,3 +56,13 @@ export async function sendTier3Agreement(adminKey: string, id: string): Promise<
   }
   return (await response.json()) as AdminTier3Case;
 }
+
+export async function requestTier3SuccessFee(adminKey: string, id: string): Promise<AdminTier3Case> {
+  const response = await adminFetch(`/api/admin/tier3-cases/${id}/request-success-fee`, adminKey, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to request the success fee.');
+  }
+  return (await response.json()) as AdminTier3Case;
+}

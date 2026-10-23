@@ -511,6 +511,12 @@ namespace Novira.Backend.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SuccessFeePaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SuccessFeeRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("TargetOpportunityId")
                         .HasColumnType("uuid");
 

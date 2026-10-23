@@ -50,3 +50,21 @@ export async function signTier3Agreement(fullName: string): Promise<Tier3Case> {
 
   return (await response.json()) as Tier3Case;
 }
+
+export async function verifySuccessFeeSession(sessionId: string): Promise<Tier3Case> {
+  const response = await fetch('/api/tier3/verify-success-fee-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+
+  if (response.status === 401) {
+    throw new NotSignedInError();
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.message ?? 'Could not verify your payment.');
+  }
+
+  return (await response.json()) as Tier3Case;
+}

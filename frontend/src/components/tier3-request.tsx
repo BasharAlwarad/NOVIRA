@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchMyTier3Case, requestTier3, signTier3Agreement } from '@/lib/api/tier3';
-import { getTier3PaymentLink } from '@/lib/tier-pricing';
+import { getTier3PaymentLink, getTier3SuccessFeePaymentLink, TIER3_SUCCESS_FEE_EUR } from '@/lib/tier-pricing';
 import type { Tier3Case, Tier3CaseStatus } from '@/lib/contracts/tier3';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
@@ -164,6 +164,33 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
           ) : (
             <p className="mt-2 text-xs text-red-600">
               Payment isn&apos;t set up yet for this amount — contact us via Messages.
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // Secured, success fee requested, not yet paid — no new agreement or
+    // signature needed here, the already-signed agreement's own Section 3/4
+    // already covers this fee (see Tier3AgreementTemplate.cs).
+    if (tier3Case.status === 'Secured' && tier3Case.successFeeRequestedAt && !tier3Case.successFeePaidAt) {
+      const successFeeLink = getTier3SuccessFeePaymentLink();
+      return (
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-900">Congratulations — your opportunity is secured!</p>
+          <p className="mt-1 text-sm text-slate-600">
+            The final success fee (€{TIER3_SUCCESS_FEE_EUR}) is now due, as agreed in your signed agreement.
+          </p>
+          {successFeeLink ? (
+            <a
+              href={successFeeLink}
+              className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              Pay €{TIER3_SUCCESS_FEE_EUR}
+            </a>
+          ) : (
+            <p className="mt-2 text-xs text-red-600">
+              Payment isn&apos;t set up yet — contact us via Messages.
             </p>
           )}
         </div>
