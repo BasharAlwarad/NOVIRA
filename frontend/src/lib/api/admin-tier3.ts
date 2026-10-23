@@ -34,12 +34,16 @@ export async function listTier3Cases(adminKey: string): Promise<AdminTier3Case[]
 export async function updateTier3Case(
   adminKey: string,
   id: string,
-  update: { status?: Tier3CaseStatus; adminNotes?: string }
+  update: { status?: Tier3CaseStatus; adminNotes?: string; targetOpportunityId?: string }
 ): Promise<AdminTier3Case> {
   const response = await adminFetch(`/api/admin/tier3-cases/${id}`, adminKey, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: update.status ?? null, adminNotes: update.adminNotes ?? null }),
+    body: JSON.stringify({
+      status: update.status ?? null,
+      adminNotes: update.adminNotes ?? null,
+      targetOpportunityId: update.targetOpportunityId ?? null,
+    }),
   });
   if (!response.ok) {
     throw new Error('Failed to update that case.');

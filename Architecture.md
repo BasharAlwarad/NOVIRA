@@ -589,6 +589,14 @@ Closes the second and last payment gap in Tier 3's pipeline: the €1,000 succes
 
 **Manual prerequisite**: one more Stripe Payment Link (flat €1,000, test mode first), success-redirect `/account?success_fee_session={CHECKOUT_SESSION_ID}`, pasted into `.env.local` as `NEXT_PUBLIC_TIER3_SUCCESS_FEE_PAYMENT_LINK` — same outstanding founder action as step 3's three links, now four total.
 
+### Tier 3 — setting a target opportunity from the admin UI (step 4, built and verified live 2026-10-23)
+
+A real, pre-existing gap: `Tier3Case.TargetOpportunityId`/`Title`/`Provider` have existed on the model since steps 1-2, but nothing — no endpoint, no UI — could ever actually set them. `PATCH /admin/tier3-cases/{id}` (`Tier3AdminEndpoints.cs`) gained a third optional field, `TargetOpportunityId`; when sent, the handler looks up the real `Opportunity` (400s if not found) and snapshots its `Title`/`Provider` onto the case at that moment — same "a historical record must never change out from under you" discipline the model's own comment already called for, so archiving the underlying `Opportunity` later can't corrupt what the case is about.
+
+**No new backend listing endpoint needed** — `TargetOpportunityPicker` (`admin/tier3-cases/page.tsx`) is a lightweight search-as-you-type component built directly on the existing `GET /admin/opportunities` (`listOpportunities()`, already used by `/admin/opportunities` itself), filtered client-side to `Approved` only and fetched once at the page level (not per-card) the first time any card's picker is opened, since the admin may open it on several cards in one visit.
+
+**Verified live** (isolated backend :5090, founder's own :5080/:3000 untouched): set a real Approved opportunity ("Nursing (BSc)," Deggendorf Institute of Technology) as the target on `salma-electrical`'s seeded case (`ActiveSearch`), confirmed the Title/Provider were correctly snapshotted in both the admin response and the user-facing `GET /tier3/my-case`; confirmed the not-found guard rejects a bogus opportunity id (400). Test data reset afterward via the same temporary-endpoint-then-remove pattern steps 3/5 used — git-confirmed zero trace left in `Program.cs`.
+
 ### Frontend conventions
 - Path alias `@/*` → `src/*` (see `tsconfig.json`).
 - Styling is Tailwind v4 (via `@tailwindcss/postcss`) plus DaisyUI components (e.g. `hero`, `btn` classes in `hero.tsx`/`site-nav.tsx`).

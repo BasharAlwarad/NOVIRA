@@ -25,7 +25,7 @@ public record AdminTier3CaseResponse(
     DateTime CreatedAt,
     DateTime? UpdatedAt);
 
-public record UpdateTier3CaseRequest(Tier3CaseStatus? Status, string? AdminNotes);
+public record UpdateTier3CaseRequest(Tier3CaseStatus? Status, string? AdminNotes, Guid? TargetOpportunityId);
 
 // The founder-facing queue for Tier 3 requests — the admin counterpart to
 // Tier3Endpoints.cs. Covers status tracking, case notes, and — as of
@@ -49,10 +49,15 @@ public static class Tier3AdminEndpoints
             return Results.Ok(cases.Select(c => ToResponse(c, emails.GetValueOrDefault(c.UserId, "(deleted user)"))));
         });
 
-        // Status and AdminNotes update together, same "whatever the admin
-        // sends, apply it" shape as OpportunitiesAdminEndpoints' archive
-        // reason — both fields optional so a note-only edit doesn't require
-        // resending the current status back.
+        // Status, AdminNotes, and TargetOpportunityId update together, same
+        // "whatever the admin sends, apply it" shape as
+        // OpportunitiesAdminEndpoints' archive reason — all optional so a
+        // note-only edit doesn't require resending the others. Setting a
+        // target opportunity snapshots its Title/Provider at set time
+        // (Tier3Case.cs's own comment on why: "a historical record must
+        // never change out from under you") rather than storing a live join
+        // — archiving the underlying Opportunity later must not corrupt
+        // what this case is actually about.
         group.MapPatch("/{id:guid}", async (Guid id, UpdateTier3CaseRequest request, AppDbContext db) =>
         {
             var tier3Case = await db.Tier3Cases.FindAsync(id);
@@ -68,6 +73,17 @@ public static class Tier3AdminEndpoints
             if (request.AdminNotes is not null)
             {
                 tier3Case.AdminNotes = request.AdminNotes;
+            }
+            if (request.TargetOpportunityId is { } targetOpportunityId)
+            {
+                var opportunity = await db.Opportunities.FindAsync(targetOpportunityId);
+                if (opportunity is null)
+                {
+                    return Results.BadRequest(new { message = "That opportunity could not be found." });
+                }
+                tier3Case.TargetOpportunityId = opportunity.Id;
+                tier3Case.TargetOpportunityTitle = opportunity.Title;
+                tier3Case.TargetOpportunityProvider = opportunity.Provider;
             }
             tier3Case.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
