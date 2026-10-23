@@ -17,13 +17,31 @@ const TIER2_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK ?? '';
 export const TIER1_PRICE_EUR = 30;
 export const TIER2_PRICE_EUR = 150;
 
-// Tier 3 has no payment link — it isn't self-checkout (Monetization-
-// Strategy.md §4.1 item 4: a real conversation happens before any payment),
-// so there's no isTier3PurchaseEnabled()/getTier3PaymentLink() pair here.
 // These are display-only figures for /#services and the request flow's own
 // copy. €500 upfront + €1,000 once an opportunity is secured.
 export const TIER3_PRICE_EUR = 1500;
 export const TIER3_UPFRONT_EUR = 500;
+
+// Tier 3 still isn't self-checkout in the Tier1/2 sense — a Payment Link
+// only ever appears after the founder has sent, and the user has signed,
+// the real agreement (see tier3-request.tsx). Three static links, one per
+// possible carry-up-adjusted amount (Monetization-Strategy.md §4.2a: €500
+// from Free, €470 from Tier 1, €350 from Tier 2) — a fixed, small set of
+// discrete prices, so this stays three manually-created Stripe Payment
+// Links rather than a dynamically-generated Checkout Session (this
+// project's Stripe integration is deliberately thin — see
+// StripeCheckoutClient.cs). Each must be configured in the Stripe dashboard
+// with the same success-redirect pattern Tier1/2 already use, with
+// &tier=Tier3 appended.
+const TIER3_PAYMENT_LINK_FROM_FREE = process.env.NEXT_PUBLIC_TIER3_PAYMENT_LINK_FROM_FREE ?? '';
+const TIER3_PAYMENT_LINK_FROM_TIER1 = process.env.NEXT_PUBLIC_TIER3_PAYMENT_LINK_FROM_TIER1 ?? '';
+const TIER3_PAYMENT_LINK_FROM_TIER2 = process.env.NEXT_PUBLIC_TIER3_PAYMENT_LINK_FROM_TIER2 ?? '';
+
+export function getTier3PaymentLink(upfrontAmountEur: number): string {
+  if (upfrontAmountEur <= 350) return TIER3_PAYMENT_LINK_FROM_TIER2;
+  if (upfrontAmountEur <= 470) return TIER3_PAYMENT_LINK_FROM_TIER1;
+  return TIER3_PAYMENT_LINK_FROM_FREE;
+}
 
 export function isTier1PurchaseEnabled(): boolean {
   return TIER1_PAYMENT_LINK.length > 0;

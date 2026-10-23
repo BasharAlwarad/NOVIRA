@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
+using Novira.Backend.Hubs;
 using Novira.Backend.Models;
 using Novira.Backend.Services;
 
@@ -26,7 +28,8 @@ public static class PurchasesEndpoints
             VerifySessionRequest request,
             HttpContext httpContext,
             AppDbContext db,
-            StripeCheckoutClient stripeClient) =>
+            StripeCheckoutClient stripeClient,
+            IHubContext<MessagesHub> hub) =>
         {
             var user = (User)httpContext.Items["CurrentUser"]!;
 
@@ -67,7 +70,32 @@ public static class PurchasesEndpoints
                 return Results.BadRequest(new { message = "This checkout session has not been paid." });
             }
 
-            var expectedAmountEur = TierPricing.GetExpectedAmountEur(tier);
+            // Tier 3's upfront amount is carry-up adjusted per user (see
+            // Tier3PricingCalculator) and frozen onto the case at
+            // send-agreement time — never TierPricing's flat constant,
+            // unlike Tier1/2. Also requires the agreement to actually have
+            // been sent and signed first; payment is never sufficient on
+            // its own for this tier, since it's not self-checkout.
+            Tier3Case? tier3Case = null;
+            int expectedAmountEur;
+            if (tier == PurchaseTier.Tier3)
+            {
+                tier3Case = await db.Tier3Cases.FirstOrDefaultAsync(c => c.UserId == user.Id);
+                if (tier3Case is null || tier3Case.UpfrontAmountEur is null)
+                {
+                    return Results.BadRequest(new { message = "No Tier 3 agreement has been sent for this account yet." });
+                }
+                if (tier3Case.SignedAt is null)
+                {
+                    return Results.BadRequest(new { message = "Please sign the agreement before paying." });
+                }
+                expectedAmountEur = tier3Case.UpfrontAmountEur.Value;
+            }
+            else
+            {
+                expectedAmountEur = TierPricing.GetExpectedAmountEur(tier);
+            }
+
             var expectedAmountCents = expectedAmountEur * 100L;
 
             if (session.Currency?.ToLowerInvariant() != "eur" || session.AmountTotal != expectedAmountCents)
@@ -83,6 +111,12 @@ public static class PurchasesEndpoints
                 StripeSessionId = request.SessionId,
             });
 
+            if (tier3Case is not null)
+            {
+                tier3Case.Status = Tier3CaseStatus.AgreementSigned;
+                tier3Case.UpdatedAt = DateTime.UtcNow;
+            }
+
             try
             {
                 await db.SaveChangesAsync();
@@ -93,6 +127,14 @@ public static class PurchasesEndpoints
                 // session id (the unique index rejected the insert) — same
                 // outcome as the idempotent path above.
                 return Results.Ok(await BuildResponseAsync(db, user.Id, alreadyProcessed: true));
+            }
+
+            if (tier3Case is not null)
+            {
+                await MessagesEndpoints.CreateAdminMessageAsync(
+                    db, hub, user.Id,
+                    "You're now Tier 3",
+                    "Your payment and signed agreement are both confirmed — you now have full Tier 3 access. We'll be in touch here as your case moves forward.");
             }
 
             return Results.Ok(await BuildResponseAsync(db, user.Id, alreadyProcessed: false));

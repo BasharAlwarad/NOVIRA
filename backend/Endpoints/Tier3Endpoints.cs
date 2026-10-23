@@ -11,8 +11,14 @@ public record Tier3CaseResponse(
     Tier3CaseStatus Status,
     string? TargetOpportunityTitle,
     string? TargetOpportunityProvider,
+    DateTime? AgreementSentAt,
+    string? AgreementText,
+    int? UpfrontAmountEur,
+    DateTime? SignedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
+
+public record SignAgreementRequest(string FullName);
 
 // The user-facing side of Tier 3 ("full service, including applying on the
 // user's behalf" — Monetization-Strategy.md §4.1 item 4). Deliberately not
@@ -70,8 +76,48 @@ public static class Tier3Endpoints
 
             return Results.Ok(ToResponse(tier3Case));
         });
+
+        // Records the signature immediately — captured even if the user
+        // never completes the payment that follows, since consent to the
+        // agreement and payment are two separate, sequential actions (see
+        // Architecture.md's "Tier 3 agreement + payment" section for why).
+        // SignerIp comes from the connection, never trusted from the
+        // request body. Does not change Tier3CaseStatus — that only moves
+        // to AgreementSigned once payment is also verified
+        // (PurchasesEndpoints.cs), so a signed-but-unpaid case doesn't look
+        // further along than it actually is.
+        group.MapPost("/sign-agreement", async (
+            SignAgreementRequest request, HttpContext httpContext, AppDbContext db) =>
+        {
+            var user = (User)httpContext.Items["CurrentUser"]!;
+
+            if (string.IsNullOrWhiteSpace(request.FullName))
+            {
+                return Results.BadRequest(new { message = "Please type your full legal name." });
+            }
+
+            var tier3Case = await db.Tier3Cases.FirstOrDefaultAsync(c => c.UserId == user.Id);
+            if (tier3Case is null || tier3Case.AgreementSentAt is null)
+            {
+                return Results.BadRequest(new { message = "There's no agreement waiting for your signature." });
+            }
+
+            if (tier3Case.SignedAt is not null)
+            {
+                return Results.Ok(ToResponse(tier3Case));
+            }
+
+            tier3Case.SignedAt = DateTime.UtcNow;
+            tier3Case.SignedFullName = request.FullName.Trim();
+            tier3Case.SignerIp = httpContext.Connection.RemoteIpAddress?.ToString();
+            tier3Case.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+
+            return Results.Ok(ToResponse(tier3Case));
+        });
     }
 
     private static Tier3CaseResponse ToResponse(Tier3Case c) => new(
-        c.Id, c.Status, c.TargetOpportunityTitle, c.TargetOpportunityProvider, c.CreatedAt, c.UpdatedAt);
+        c.Id, c.Status, c.TargetOpportunityTitle, c.TargetOpportunityProvider,
+        c.AgreementSentAt, c.AgreementText, c.UpfrontAmountEur, c.SignedAt, c.CreatedAt, c.UpdatedAt);
 }

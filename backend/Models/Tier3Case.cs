@@ -52,6 +52,27 @@ public class Tier3Case
     // in-app Messages thread, which is the user-visible channel.
     public string? AdminNotes { get; set; }
 
+    // The agreement + upfront payment step (Architecture.md's "Tier 3
+    // agreement + payment" section). "Agreement sent, not yet signed" is a
+    // computed sub-state (AgreementSentAt set, SignedAt null) rather than a
+    // new Tier3CaseStatus value — avoids enum churn for a sub-state that
+    // doesn't need its own place in the linear pipeline above.
+    public DateTime? AgreementSentAt { get; set; }
+
+    // A snapshot of exactly what the Client was shown, not a live reference
+    // to the template — the audit trail has to reflect what was actually
+    // presented and agreed to, even if the template text changes later.
+    public string? AgreementText { get; set; }
+
+    // The carry-up-adjusted amount (Tier3PricingCalculator), frozen at send
+    // time so a later purchase elsewhere can't retroactively change what was
+    // already agreed to.
+    public int? UpfrontAmountEur { get; set; }
+
+    public DateTime? SignedAt { get; set; }
+    public string? SignedFullName { get; set; }
+    public string? SignerIp { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 }

@@ -47,6 +47,8 @@ This is triggered by the product's basic mechanics (an Egyptian user's email/doc
 
 **None of this is being treated as legal advice or a substitute for one** — it's the founder's own considered risk decision, made with real information rather than in the dark, and documented here so it's an explicit, trackable choice rather than something that quietly happened.
 
+**The actual signed agreement now has a first draft, built and verified live (2026-10-23)** — the document this section's "the founder's real legal name/identity only in the actual signed Tier 3 agreement" line refers to. Ran through `novira-legal-check` before being written; now real code (`backend/Resources/Tier3AgreementTemplate.cs`), full text and reasoning in `Architecture.md`'s "Tier 3 agreement + payment" section. It carries forward, not resolves, this section's open item above (governing law/cross-border consumer protection) and §4's §296a risk below — both marked `[OPEN]` in the template rather than guessed at. The endpoint that sends it deliberately refuses to run until the founder's real legal name and business status are configured (never a hardcoded placeholder) — still outstanding as of this writing, see `Architecture.md`'s "Manual prerequisites" note.
+
 ---
 
 ## 4. Tier 3's fee structure — a second, distinct legal question (found 2026-10-12, decided 2026-10-12)

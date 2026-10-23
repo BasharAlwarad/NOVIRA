@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AdminUnauthorizedError, listTier3Cases, updateTier3Case } from '@/lib/api/admin-tier3';
+import { AdminUnauthorizedError, listTier3Cases, sendTier3Agreement, updateTier3Case } from '@/lib/api/admin-tier3';
 import type { AdminTier3Case, Tier3CaseStatus } from '@/lib/contracts/tier3';
 import { useAdminKey } from '@/hooks/useAdminKey';
 
@@ -53,6 +53,7 @@ function CaseCard({
   const [notes, setNotes] = useState(tier3Case.adminNotes ?? '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [sendingAgreement, setSendingAgreement] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleStatusChange = async (status: Tier3CaseStatus) => {
@@ -69,6 +70,23 @@ function CaseCard({
       }
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const handleSendAgreement = async () => {
+    setSendingAgreement(true);
+    setError(null);
+    try {
+      const updated = await sendTier3Agreement(adminKey, tier3Case.id);
+      onUpdated(updated);
+    } catch (err) {
+      if (err instanceof AdminUnauthorizedError) {
+        clearAdminKey();
+      } else {
+        setError('Failed to send the agreement.');
+      }
+    } finally {
+      setSendingAgreement(false);
     }
   };
 
@@ -145,6 +163,23 @@ function CaseCard({
       >
         {savingNotes ? 'Saving…' : 'Save notes'}
       </button>
+
+      {tier3Case.agreementSentAt ? (
+        <p className="mt-3 text-xs text-slate-500">
+          Agreement sent {formatDateTime(tier3Case.agreementSentAt)} — €{tier3Case.upfrontAmountEur}
+          {tier3Case.signedAt ? `, signed ${formatDateTime(tier3Case.signedAt)}` : ', not yet signed'}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSendAgreement}
+          disabled={sendingAgreement || tier3Case.status !== 'ConsultationScheduled'}
+          className="mt-3 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          title={tier3Case.status !== 'ConsultationScheduled' ? 'Move the status to Consultation Scheduled first' : undefined}
+        >
+          {sendingAgreement ? 'Sending…' : 'Send agreement'}
+        </button>
+      )}
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </div>

@@ -490,8 +490,23 @@ namespace Novira.Backend.Migrations
                     b.Property<string>("AdminNotes")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("AgreementSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AgreementText")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SignedFullName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SignerIp")
+                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -507,6 +522,9 @@ namespace Novira.Backend.Migrations
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UpfrontAmountEur")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");

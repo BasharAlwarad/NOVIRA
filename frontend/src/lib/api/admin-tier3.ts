@@ -46,3 +46,13 @@ export async function updateTier3Case(
   }
   return (await response.json()) as AdminTier3Case;
 }
+
+export async function sendTier3Agreement(adminKey: string, id: string): Promise<AdminTier3Case> {
+  const response = await adminFetch(`/api/admin/tier3-cases/${id}/send-agreement`, adminKey, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to send the agreement.');
+  }
+  return (await response.json()) as AdminTier3Case;
+}

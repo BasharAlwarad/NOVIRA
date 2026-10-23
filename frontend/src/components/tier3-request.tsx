@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchMyTier3Case, requestTier3 } from '@/lib/api/tier3';
+import { fetchMyTier3Case, requestTier3, signTier3Agreement } from '@/lib/api/tier3';
+import { getTier3PaymentLink } from '@/lib/tier-pricing';
 import type { Tier3Case, Tier3CaseStatus } from '@/lib/contracts/tier3';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
@@ -19,6 +20,78 @@ const TIER3_STATUS_LABELS: Record<Tier3CaseStatus, string> = {
   // never a self-service action anywhere in the app.
   Refunded: "This case was refunded. Message us if you'd like to talk about restarting.",
 };
+
+// The "review and sign" sub-state — between the agreement being sent
+// (AgreementSentAt set) and signed (SignedAt set). Records the signature
+// immediately on submit, independent of payment (see
+// backend/Endpoints/Tier3Endpoints.cs's /sign-agreement comment for why
+// those are two separate, sequential actions). Copy here follows the same
+// novira-legal-check discipline as the rest of this file — the agreement
+// text itself (server-rendered, shown verbatim below) is the one place that
+// states the real authorization plainly; this surrounding UI copy doesn't
+// need to repeat that.
+function AgreementSigningForm({
+  tier3Case,
+  onSigned,
+}: {
+  tier3Case: Tier3Case;
+  onSigned: (updated: Tier3Case) => void;
+}) {
+  const [fullName, setFullName] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSign = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const updated = await signTier3Agreement(fullName.trim());
+      onSigned(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sign the agreement.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <p className="text-sm font-semibold text-slate-900">Your full-service agreement is ready</p>
+      <p className="mt-1 text-sm text-slate-600">Read it below, then sign to continue to payment.</p>
+      <pre className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-700">
+        {tier3Case.agreementText}
+      </pre>
+      <label className="mt-3 block text-xs font-semibold text-slate-600">
+        Full legal name
+        <input
+          type="text"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+        />
+      </label>
+      <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-0.5"
+        />
+        I have read and agree to the terms above.
+      </label>
+      <button
+        type="button"
+        onClick={handleSign}
+        disabled={submitting || !agreed || fullName.trim().length === 0}
+        className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {submitting ? 'Signing…' : 'Sign agreement'}
+      </button>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
 
 // Tier 3's own "not self-checkout" entry point (Monetization-Strategy.md
 // §4.1 item 4) — unlike Tier1/2's instant Stripe Payment Link
@@ -65,6 +138,38 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
   }
 
   if (tier3Case) {
+    // Awaiting signature — the agreement's been sent but not yet signed.
+    if (tier3Case.agreementSentAt && !tier3Case.signedAt) {
+      return <AgreementSigningForm tier3Case={tier3Case} onSigned={setTier3Case} />;
+    }
+
+    // Signed, awaiting payment — status only reaches AgreementSigned once
+    // payment is also verified (PurchasesEndpoints.cs), so "signed but
+    // status is still ConsultationScheduled" is exactly this sub-state.
+    if (tier3Case.signedAt && tier3Case.status === 'ConsultationScheduled' && tier3Case.upfrontAmountEur) {
+      const paymentLink = getTier3PaymentLink(tier3Case.upfrontAmountEur);
+      return (
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-900">Agreement signed — one step left</p>
+          <p className="mt-1 text-sm text-slate-600">
+            Pay the upfront fee (€{tier3Case.upfrontAmountEur}) to get started.
+          </p>
+          {paymentLink ? (
+            <a
+              href={paymentLink}
+              className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              Pay €{tier3Case.upfrontAmountEur}
+            </a>
+          ) : (
+            <p className="mt-2 text-xs text-red-600">
+              Payment isn&apos;t set up yet for this amount — contact us via Messages.
+            </p>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="rounded-2xl bg-slate-50 p-4">
         <p className="text-sm font-semibold text-slate-900">Your full-service request</p>

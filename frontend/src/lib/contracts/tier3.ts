@@ -17,6 +17,10 @@ export interface Tier3Case {
   status: Tier3CaseStatus;
   targetOpportunityTitle: string | null;
   targetOpportunityProvider: string | null;
+  agreementSentAt: string | null;
+  agreementText: string | null;
+  upfrontAmountEur: number | null;
+  signedAt: string | null;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -31,6 +35,9 @@ export interface AdminTier3Case {
   targetOpportunityTitle: string | null;
   targetOpportunityProvider: string | null;
   adminNotes: string | null;
+  agreementSentAt: string | null;
+  upfrontAmountEur: number | null;
+  signedAt: string | null;
   createdAt: string;
   updatedAt: string | null;
 }
