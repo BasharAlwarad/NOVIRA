@@ -17,9 +17,10 @@ const TIER2_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK ?? '';
 export const TIER1_PRICE_EUR = 30;
 export const TIER2_PRICE_EUR = 150;
 
-// These are display-only figures for /#services and the request flow's own
-// copy. €500 upfront + €1,000 once an opportunity is secured.
-export const TIER3_PRICE_EUR = 1500;
+// Display-only figures for /#services and the request/signing flow's own
+// copy — shown as two separate figures, not one combined total, since
+// they're genuinely two separate payments (upfront, then a success fee
+// only if the application succeeds), not one flat charge.
 export const TIER3_UPFRONT_EUR = 500;
 export const TIER3_SUCCESS_FEE_EUR = 1000;
 

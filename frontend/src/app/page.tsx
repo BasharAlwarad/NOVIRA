@@ -1,7 +1,7 @@
 import { Hero } from '@/components/hero';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
-import { TIER1_PRICE_EUR, TIER2_PRICE_EUR, TIER3_PRICE_EUR } from '@/lib/tier-pricing';
+import { TIER1_PRICE_EUR, TIER2_PRICE_EUR, TIER3_UPFRONT_EUR, TIER3_SUCCESS_FEE_EUR } from '@/lib/tier-pricing';
 
 // Rewritten 2026-10-04 (point 1 of the UI/UX hardening pass) — the previous
 // copy here was generic "Study/Work/Information" placeholder text written
@@ -62,16 +62,23 @@ export default async function Home() {
             </p>
           </div>
           <div className="space-y-3 rounded-3xl bg-slate-50 p-5">
+            {/* Shown as two figures, not one combined total — this is
+                genuinely two separate payments (an upfront fee, then a
+                success fee only if the application succeeds), and
+                collapsing that into a single "€1,500" price would read as
+                one flat charge upfront, which isn't honest about how it
+                actually works. */}
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Tier 3 — €{TIER3_PRICE_EUR}
+              Tier 3 — €{TIER3_UPFRONT_EUR} + €{TIER3_SUCCESS_FEE_EUR}
             </p>
             <h2 className="text-xl font-bold text-slate-900">
               Get full-service help
             </h2>
             <p className="text-sm leading-6 text-slate-600">
-              We help you complete and submit your application, start to
-              finish, under a signed agreement — after a real conversation
-              with our team first, not an instant purchase.
+              After a real conversation with our team, we help you complete
+              and submit your application under a signed agreement —
+              €{TIER3_UPFRONT_EUR} upfront, the remaining €{TIER3_SUCCESS_FEE_EUR} only if it
+              succeeds.
             </p>
           </div>
         </section>
