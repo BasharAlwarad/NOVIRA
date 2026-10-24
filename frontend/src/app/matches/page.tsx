@@ -17,7 +17,7 @@ import {
   buildApplicationHelpLink,
   isApplicationHelpEnabled,
 } from '@/lib/application-help';
-import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
+import { getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
 import { Tier3RequestCard } from '@/components/tier3-request';
 import { SiteFooter } from '@/components/site-footer';
@@ -118,44 +118,6 @@ function BlurredMatchCard({ variant }: { variant: number }) {
   );
 }
 
-// Placed at the TOP of the results, not after them — found live 2026-09-29
-// that with 30+ blurred cards below it, a bottom-of-list banner required
-// scrolling past all of them to ever see it. Same placement as the real
-// references this was modeled on (Glassdoor's "Unlock salaries" bar,
-// LinkedIn's "See who's viewed your profile" banner) — the offer to unlock
-// is the first thing seen, not a reward for scrolling to the end.
-function UnlockBanner({ blurredCount }: { blurredCount: number }) {
-  if (!isTier1PurchaseEnabled()) {
-    return null;
-  }
-
-  return (
-    <div className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
-          <LockIcon className="h-4 w-4" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-emerald-900">
-            {blurredCount > 0
-              ? `Unlock all ${blurredCount + 1} matches`
-              : 'Unlock full access to your matches'}
-          </p>
-          <p className="mt-1 text-sm leading-6 text-emerald-800">
-            €{TIER1_PRICE_EUR} unlocks every matching opportunity, plus a quick human review of
-            your profile.
-          </p>
-          <a
-            href={getTier1PaymentLink()}
-            className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-          >
-            Unlock — €{TIER1_PRICE_EUR}
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Client-only: Leaflet touches window/document, which breaks under Next's
 // server render even inside an already-'use client' page — the standard
@@ -993,10 +955,13 @@ function MatchesPageContent() {
                 </p>
               ) : (
                 <>
-                  <UnlockBanner blurredCount={state.blurredCount} />
-                  <div className="mt-4 space-y-3">
-                    <TierUpgradeOptions effectiveTier={state.effectiveTier} includeTier1={false} />
-                    <Tier3RequestCard effectiveTier={state.effectiveTier} />
+                  <div className="flex flex-wrap gap-3">
+                    <TierUpgradeOptions
+                      effectiveTier={state.effectiveTier}
+                      compact
+                      blurredCount={state.blurredCount}
+                    />
+                    <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                   </div>
                   <div className="mt-4">
                     <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
@@ -1027,9 +992,9 @@ function MatchesPageContent() {
 
           {state.status === 'loaded' && state.hasProfile && state.effectiveTier !== 'Free' && (
             <>
-              <div className="mb-6 space-y-3">
-                <TierUpgradeOptions effectiveTier={state.effectiveTier} />
-                <Tier3RequestCard effectiveTier={state.effectiveTier} />
+              <div className="mb-6 flex flex-wrap gap-3">
+                <TierUpgradeOptions effectiveTier={state.effectiveTier} compact />
+                <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
               </div>
 
               <div className="mb-6">

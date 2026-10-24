@@ -28,13 +28,31 @@ const TIER_RANK: Record<EffectiveTier, number> = { Free: 0, Tier1: 1, Tier2: 2, 
 export function TierUpgradeOptions({
   effectiveTier,
   includeTier1 = true,
+  compact = false,
+  blurredCount,
 }: {
   effectiveTier: EffectiveTier;
-  // Suppressed on /matches' Free-tier view specifically, where
-  // UnlockBanner already renders the identical Tier 1 offer inline next to
-  // the blurred matches — showing the same €30 CTA twice on one screen
-  // would be redundant, not reinforcing.
+  // Only meaningful when NOT compact — the old /matches layout suppressed
+  // Tier1 here because a separate UnlockBanner already covered it. The
+  // compact layout folds Tier1 directly into this row instead (see
+  // blurredCount below), so callers using compact should leave this at its
+  // default (true).
   includeTier1?: boolean;
+  // The tight-card row style (found 2026-10-24: /matches' original stacked,
+  // verbose cards — Tier1's own box, Tier2's 5-item list — amounted to too
+  // much to read before a user ever got back to their actual matches).
+  // Mirrors /#services' already-established compact card language (price
+  // label, bold heading, one tight sentence) instead of inventing a new
+  // style, plus a compact CTA button each card still needs that the
+  // homepage's purely-marketing cards don't. `false` (the default) keeps
+  // /account's existing stacked, more detailed cards completely unchanged —
+  // this is an opt-in per caller, not a global redesign.
+  compact?: boolean;
+  // /matches-specific: lets Tier1's compact heading say "Unlock all 35
+  // matches" instead of a generic line, same specificity the old
+  // UnlockBanner had. Omitted (e.g. on /account, where there's no blurred
+  // match count) falls back to generic copy.
+  blurredCount?: number;
 }) {
   const rank = TIER_RANK[effectiveTier];
   const showTier1 = includeTier1 && rank < TIER_RANK.Tier1 && isTier1PurchaseEnabled();
@@ -42,6 +60,61 @@ export function TierUpgradeOptions({
 
   if (!showTier1 && !showTier2) {
     return null;
+  }
+
+  if (compact) {
+    // A Fragment, deliberately not its own wrapping flex div — the caller
+    // (e.g. /matches) already provides one shared `flex flex-wrap` row that
+    // this and Tier3RequestCard both render directly into. A nested flex
+    // container here would make the *whole* Tier1+Tier2 block act as a
+    // single flex item from the outer row's perspective — real bug found
+    // live 2026-10-24: Tier 3 kept wrapping onto its own line no matter how
+    // narrow Tier1/Tier2's min-width got, because the outer row was only
+    // ever flexing two items (this whole block, and Tier3's card), never
+    // the three individual cards a user actually sees.
+    return (
+      <>
+        {showTier1 && (
+          <div className="min-w-48 flex-1 space-y-2 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+              Tier 1 — €{TIER1_PRICE_EUR}
+            </p>
+            <h3 className="text-base font-bold text-emerald-950">
+              {blurredCount !== undefined && blurredCount > 0
+                ? `Unlock all ${blurredCount + 1} matches`
+                : 'Unlock every match'}
+            </h3>
+            <p className="text-sm leading-6 text-emerald-800">
+              Every opportunity that fits your profile, plus a human review.
+            </p>
+            <a
+              href={getTier1PaymentLink()}
+              className="mt-1 inline-flex h-9 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              Unlock — €{TIER1_PRICE_EUR}
+            </a>
+          </div>
+        )}
+
+        {showTier2 && (
+          <div className="min-w-48 flex-1 space-y-2 rounded-3xl bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+              Tier 2 — €{TIER2_PRICE_EUR}
+            </p>
+            <h3 className="text-base font-bold text-slate-900">Get application support</h3>
+            <p className="text-sm leading-6 text-slate-600">
+              AI-drafted CVs for each application, real-time chat, and application tracking.
+            </p>
+            <a
+              href={getTier2PaymentLink()}
+              className="mt-1 inline-flex h-9 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              Get started — €{TIER2_PRICE_EUR}
+            </a>
+          </div>
+        )}
+      </>
+    );
   }
 
   return (

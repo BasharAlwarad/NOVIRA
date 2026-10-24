@@ -118,7 +118,22 @@ function AgreementSigningForm({
 // the underlying service does involve submitting under signed authorization
 // later on (the discipline is about what's said, not what's eventually
 // done).
-export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTier }) {
+export function Tier3RequestCard({
+  effectiveTier,
+  compact = false,
+}: {
+  effectiveTier: EffectiveTier;
+  // Same opt-in tight-card style TierUpgradeOptions gained alongside this
+  // (see its own comment for the full reasoning) — only applies to this
+  // component's idle "want full-service help?" pitch state, the common
+  // case most users see. Any state where a real case already exists
+  // (signing, payment, status) keeps its existing, more detailed styling
+  // and renders at full width (`w-full` beats flex-basis, so it correctly
+  // wraps onto its own line within a compact row rather than trying to
+  // cram a signing form into a narrow card) — those states are rarer and
+  // genuinely need the room.
+  compact?: boolean;
+}) {
   const [tier3Case, setTier3Case] = useState<Tier3Case | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -137,10 +152,16 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
     return null;
   }
 
+  const fullWidthIfCompact = compact ? 'w-full' : '';
+
   if (tier3Case) {
     // Awaiting signature — the agreement's been sent but not yet signed.
     if (tier3Case.agreementSentAt && !tier3Case.signedAt) {
-      return <AgreementSigningForm tier3Case={tier3Case} onSigned={setTier3Case} />;
+      return (
+        <div className={fullWidthIfCompact}>
+          <AgreementSigningForm tier3Case={tier3Case} onSigned={setTier3Case} />
+        </div>
+      );
     }
 
     // Signed, awaiting payment — status only reaches AgreementSigned once
@@ -149,7 +170,7 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
     if (tier3Case.signedAt && tier3Case.status === 'ConsultationScheduled' && tier3Case.upfrontAmountEur) {
       const paymentLink = getTier3PaymentLink(tier3Case.upfrontAmountEur);
       return (
-        <div className="rounded-2xl bg-slate-50 p-4">
+        <div className={`rounded-2xl bg-slate-50 p-4 ${fullWidthIfCompact}`}>
           <p className="text-sm font-semibold text-slate-900">Agreement signed — one step left</p>
           <p className="mt-1 text-sm text-slate-600">
             Pay the upfront fee (€{tier3Case.upfrontAmountEur}) to get started.
@@ -176,7 +197,7 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
     if (tier3Case.status === 'Secured' && tier3Case.successFeeRequestedAt && !tier3Case.successFeePaidAt) {
       const successFeeLink = getTier3SuccessFeePaymentLink();
       return (
-        <div className="rounded-2xl bg-slate-50 p-4">
+        <div className={`rounded-2xl bg-slate-50 p-4 ${fullWidthIfCompact}`}>
           <p className="text-sm font-semibold text-slate-900">Congratulations — your opportunity is secured!</p>
           <p className="mt-1 text-sm text-slate-600">
             The final success fee (€{TIER3_SUCCESS_FEE_EUR}) is now due, as agreed in your signed agreement.
@@ -198,7 +219,7 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
     }
 
     return (
-      <div className="rounded-2xl bg-slate-50 p-4">
+      <div className={`rounded-2xl bg-slate-50 p-4 ${fullWidthIfCompact}`}>
         <p className="text-sm font-semibold text-slate-900">Your full-service request</p>
         <p className="mt-1 text-sm text-slate-600">{TIER3_STATUS_LABELS[tier3Case.status]}</p>
         {tier3Case.targetOpportunityTitle && (
@@ -227,6 +248,28 @@ export function Tier3RequestCard({ effectiveTier }: { effectiveTier: EffectiveTi
       setSubmitting(false);
     }
   };
+
+  if (compact) {
+    return (
+      <div className="min-w-48 flex-1 space-y-2 rounded-3xl border border-slate-300 bg-slate-50 p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Tier 3</p>
+        <h3 className="text-base font-bold text-slate-900">Want full-service help?</h3>
+        <p className="text-sm leading-6 text-slate-600">
+          We help you complete and submit your application under a signed agreement, after a real
+          conversation first.
+        </p>
+        <button
+          type="button"
+          onClick={handleRequest}
+          disabled={submitting}
+          className="mt-1 inline-flex h-9 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {submitting ? 'Sending…' : 'Request full-service help'}
+        </button>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl bg-slate-900 p-4">
