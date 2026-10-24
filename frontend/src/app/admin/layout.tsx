@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { label: 'Users', href: '/admin/users/profiles' },
   { label: 'CV requests', href: '/admin/cv-requests' },
   { label: 'Tier 3 cases', href: '/admin/tier3-cases' },
+  { label: 'Dev links', href: '/admin/dev-links' },
 ];
 
 // The single admin gate — every /admin/* page used to duplicate this exact

@@ -74,7 +74,8 @@ public static class AuthEndpoints
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
-            IHostEnvironment hostEnvironment) =>
+            IHostEnvironment hostEnvironment,
+            DevMagicLinkStore devMagicLinkStore) =>
         {
             var logger = loggerFactory.CreateLogger("Auth");
 
@@ -128,9 +129,9 @@ public static class AuthEndpoints
                 // response body (which is identical in every environment).
                 if (hostEnvironment.IsDevelopment())
                 {
-                    logger.LogInformation(
-                        "[DEV ONLY] Magic link for {Email}: {BaseUrl}/auth/verify?token={Token}",
-                        normalizedEmail, configuration["Frontend:BaseUrl"] ?? "http://localhost:3000", rawToken);
+                    var devVerifyUrl = $"{configuration["Frontend:BaseUrl"] ?? "http://localhost:3000"}/auth/verify?token={rawToken}";
+                    logger.LogInformation("[DEV ONLY] Magic link for {Email}: {Url}", normalizedEmail, devVerifyUrl);
+                    devMagicLinkStore.Record(normalizedEmail, devVerifyUrl);
                 }
 
                 var emailSent = await SendMagicLinkEmailAsync(

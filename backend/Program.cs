@@ -65,6 +65,7 @@ builder.Services.AddScoped<StripeCheckoutClient>();
 // singleton-scoped regardless.
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<LiveMessagingTicketStore>();
+builder.Services.AddSingleton<DevMagicLinkStore>();
 
 // Coarse per-IP ceiling on /leads. Note this only ever sees the Next.js
 // server's IP for browser traffic (the frontend proxies the request
@@ -176,6 +177,19 @@ app.MapCvReferenceSettingsAdminEndpoints();
 app.MapTier3Endpoints();
 app.MapTier3AdminEndpoints();
 app.MapHub<MessagesHub>("/hubs/messages");
+
+// Dev-only: browse recently-generated magic links instead of scrolling
+// terminal output for them (see DevMagicLinkStore.cs's own comment for
+// why this exists — Resend's sandbox tier can't deliver to any address but
+// the real account owner's). Registered only in Development, not just
+// admin-key-gated, so the route structurally doesn't exist outside local
+// dev regardless of any config mistake — same discipline the console log
+// line it mirrors already follows.
+if (app.Environment.IsDevelopment())
+{
+    app.MapGet("/admin/dev-magic-links", (DevMagicLinkStore store) => Results.Ok(store.GetRecent()))
+        .AddEndpointFilter<AdminAuthFilter>();
+}
 
 app.MapPost("/leads", async (
     SaveResultRequest request,
