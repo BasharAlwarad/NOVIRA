@@ -13,8 +13,10 @@ import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
 import type { IntakeStatus } from '@/lib/contracts/intake';
 import type { PurchaseTier } from '@/lib/contracts/purchases';
+import { Award, Crown, Medal, Sparkles } from 'lucide-react';
 import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
 import { Tier3RequestCard } from '@/components/tier3-request';
+import { TierBadge } from '@/components/tier-badge';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -347,6 +349,9 @@ function DocumentsSection({
 }
 
 
+// Plain-text labels for toast/confirmation copy (e.g. "Payment confirmed —
+// you're on Tier 2 — Application support.") — distinct from
+// CURRENT_PLAN_CONFIG below, which drives the visual banner.
 const TIER_LABELS: Record<EffectiveTier, string> = {
   Free: 'Free',
   Tier1: 'Tier 1 — Unlock all matches',
@@ -354,24 +359,87 @@ const TIER_LABELS: Record<EffectiveTier, string> = {
   Tier3: 'Tier 3 — Full service',
 };
 
+const CURRENT_PLAN_CONFIG: Record<
+  Exclude<EffectiveTier, 'Free'>,
+  { label: string; gradient: string; icon: typeof Medal; iconColorClass: string; stars: number }
+> = {
+  Tier1: { label: 'Bronze — Tier 1', gradient: 'from-amber-800 to-amber-700', icon: Medal, iconColorClass: 'text-amber-800', stars: 1 },
+  Tier2: { label: 'Silver — Tier 2', gradient: 'from-slate-600 to-slate-500', icon: Award, iconColorClass: 'text-slate-600', stars: 2 },
+  Tier3: { label: 'Gold — Tier 3', gradient: 'from-yellow-600 to-yellow-500', icon: Crown, iconColorClass: 'text-yellow-600', stars: 3 },
+};
+
 // "Where the user unlocks... shows what tier or level he is on and what can
-// he unlock" — the founder's own framing for where this belongs. Tier 2's
-// upsell (added 2026-09-29) deliberately describes only what the tier IS
-// (Monetization-Strategy.md §4.1's real scope), not how it's delivered —
-// the CV-generation system and interview-booking mechanism aren't built
-// yet, same "sell the defined tier, fulfill it manually for now" precedent
-// Tier 1's own still-manual "human review" already set. Wording checked
-// against Legal.md/novira-legal-check: "help you prepare/apply," never
-// "we apply for you" (that's Tier 3's line), no outcome guarantees.
+// he unlock" — the founder's own framing for where this belongs. Round 6
+// replaces the old plain-text "Your plan: Tier 2 — Application support"
+// line with the same bronze/silver/gold medallion+star visual language
+// already built for /matches and /plans/tier-X (TierBadge,
+// @/components/tier-badge) — status, not a purchase pitch, so no CTA here.
+// Free gets a deliberately neutral (not one of the three tier colors)
+// treatment with no stars, since there's no rank to show yet.
+function CurrentPlanBanner({ effectiveTier }: { effectiveTier: EffectiveTier }) {
+  if (effectiveTier === 'Free') {
+    return (
+      <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+        <div className="bg-linear-to-br from-slate-300 to-slate-200 px-6 pt-6 pb-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Your current plan</p>
+          <h2 className="mt-1 text-xl font-bold text-slate-800">Free</h2>
+        </div>
+        <div className="flex flex-col items-center px-6 pb-6">
+          <TierBadge icon={Sparkles} iconColorClass="text-slate-500" starCount={0} />
+          <p className="mt-2 text-center text-sm text-slate-600">
+            You&apos;re on the free plan — upgrade below for more.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const config = CURRENT_PLAN_CONFIG[effectiveTier];
+  return (
+    <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+      <div className={`bg-linear-to-br ${config.gradient} px-6 pt-6 pb-10`}>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Your current plan</p>
+        <h2 className="mt-1 text-xl font-bold text-white">{config.label}</h2>
+      </div>
+      <div className="flex flex-col items-center px-6 pb-6">
+        <TierBadge icon={config.icon} iconColorClass={config.iconColorClass} starCount={config.stars} />
+        <p className="mt-2 text-center text-sm text-slate-600">You&apos;re all set at this level.</p>
+      </div>
+    </div>
+  );
+}
+
+// Tier 2's upsell (added 2026-09-29) deliberately describes only what the
+// tier IS (Monetization-Strategy.md §4.1's real scope), not how it's
+// delivered — the CV-generation system and interview-booking mechanism
+// aren't built yet, same "sell the defined tier, fulfill it manually for
+// now" precedent Tier 1's own still-manual "human review" already set.
+// Wording checked against Legal.md/novira-legal-check: "help you
+// prepare/apply," never "we apply for you" (that's Tier 3's line), no
+// outcome guarantees.
+//
+// Round 6: the upgrade cards below switch to `compact` — the exact same
+// gradient/medallion/star card component /matches uses, replacing the old
+// plain stacked green boxes this section used to render.
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold text-slate-900">Your plan</h2>
-      <p className="mt-1 text-sm font-medium text-slate-700">{TIER_LABELS[effectiveTier]}</p>
+    <section className="rounded-3xl border border-slate-200 bg-white p-4">
+      <h2 className="px-1 text-sm font-semibold text-slate-900">Your plan</h2>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-4">
+        <CurrentPlanBanner effectiveTier={effectiveTier} />
+      </div>
+
+      {/* -mx-2 + gap-3 (vs. the compact row's usual gap-4 on /matches,
+          which has more room) claws back just enough width for all three
+          cards to sit on one line within this page's narrower, padded
+          card — /account's max-w-2xl matches /matches', but this section's
+          own p-4 wrapper eats into it, so the unmodified /matches spacing
+          wraps Gold onto its own row here. Verified via real browser
+          bounding-box checks, not just visual inspection. */}
+      <div className="mt-4 -mx-2 flex flex-wrap gap-3">
         <TierUpgradeOptions effectiveTier={effectiveTier} />
-        <Tier3RequestCard effectiveTier={effectiveTier} />
+        <Tier3RequestCard effectiveTier={effectiveTier} compact />
       </div>
     </section>
   );

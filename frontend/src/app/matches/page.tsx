@@ -958,7 +958,6 @@ function MatchesPageContent() {
                   <div className="flex flex-wrap gap-3">
                     <TierUpgradeOptions
                       effectiveTier={state.effectiveTier}
-                      compact
                       blurredCount={state.blurredCount}
                     />
                     <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
@@ -993,7 +992,7 @@ function MatchesPageContent() {
           {state.status === 'loaded' && state.hasProfile && state.effectiveTier !== 'Free' && (
             <>
               <div className="mb-6 flex flex-wrap gap-3">
-                <TierUpgradeOptions effectiveTier={state.effectiveTier} compact />
+                <TierUpgradeOptions effectiveTier={state.effectiveTier} />
                 <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
               </div>
 

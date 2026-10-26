@@ -2,9 +2,7 @@ import Link from 'next/link';
 import { Award, CheckCircle2, Medal } from 'lucide-react';
 import {
   TIER1_PRICE_EUR,
-  TIER2_PRICE_EUR,
-  getTier1PaymentLink,
-  getTier2PaymentLink,
+  getTier2PriceEur,
   isTier1PurchaseEnabled,
   isTier2PurchaseEnabled,
 } from '@/lib/tier-pricing';
@@ -28,63 +26,49 @@ const TIER_RANK: Record<EffectiveTier, number> = { Free: 0, Tier1: 1, Tier2: 2, 
 // always rendered separately and unconditionally by Tier3RequestCard,
 // regardless of effectiveTier, rather than folded into this "next paid
 // tier, buy instantly" list.
+//
+// Round 6: /account switched from its old stacked, plain-green-box styling
+// (a second, separate rendering branch this component used to carry) to
+// this same tight-card styling — the old branch had zero remaining callers
+// once that happened, so it was deleted rather than left as dead code.
 export function TierUpgradeOptions({
   effectiveTier,
-  includeTier1 = true,
-  compact = false,
   blurredCount,
 }: {
   effectiveTier: EffectiveTier;
-  // Only meaningful when NOT compact — the old /matches layout suppressed
-  // Tier1 here because a separate UnlockBanner already covered it. The
-  // compact layout folds Tier1 directly into this row instead (see
-  // blurredCount below), so callers using compact should leave this at its
-  // default (true).
-  includeTier1?: boolean;
-  // The tight-card row style (found 2026-10-24: /matches' original stacked,
-  // verbose cards — Tier1's own box, Tier2's 5-item list — amounted to too
-  // much to read before a user ever got back to their actual matches).
-  // Mirrors /#services' already-established compact card language (price
-  // label, bold heading, one tight sentence) instead of inventing a new
-  // style, plus a compact CTA button each card still needs that the
-  // homepage's purely-marketing cards don't. `false` (the default) keeps
-  // /account's existing stacked, more detailed cards completely unchanged —
-  // this is an opt-in per caller, not a global redesign.
-  compact?: boolean;
-  // /matches-specific: lets Tier1's compact heading say "Unlock all 35
-  // matches" instead of a generic line, same specificity the old
-  // UnlockBanner had. Omitted (e.g. on /account, where there's no blurred
-  // match count) falls back to generic copy.
+  // /matches-specific: lets Tier1's heading say "Unlock all 35 matches"
+  // instead of a generic line, same specificity the old UnlockBanner had.
+  // Omitted (e.g. on /account, where there's no blurred match count) falls
+  // back to generic copy.
   blurredCount?: number;
 }) {
   const rank = TIER_RANK[effectiveTier];
-  const showTier1 = includeTier1 && rank < TIER_RANK.Tier1 && isTier1PurchaseEnabled();
+  const showTier1 = rank < TIER_RANK.Tier1 && isTier1PurchaseEnabled();
   const showTier2 = rank < TIER_RANK.Tier2 && isTier2PurchaseEnabled();
 
   if (!showTier1 && !showTier2) {
     return null;
   }
 
-  if (compact) {
-    // A Fragment, deliberately not its own wrapping flex div — the caller
-    // (e.g. /matches) already provides one shared `flex flex-wrap` row that
-    // this and Tier3RequestCard both render directly into. A nested flex
-    // container here would make the *whole* Tier1+Tier2 block act as a
-    // single flex item from the outer row's perspective — real bug found
-    // live 2026-10-24: Tier 3 kept wrapping onto its own line no matter how
-    // narrow Tier1/Tier2's min-width got, because the outer row was only
-    // ever flexing two items (this whole block, and Tier3's card), never
-    // the three individual cards a user actually sees.
-    //
-    // Bronze/Silver/Gold (this card's two, Tier 3's gold lives in
-    // tier3-request.tsx) applies to the badge/border/background tint only —
-    // the action button stays visually identical across all three cards on
-    // purpose (explicit feedback: "buttons must be consistent"), and each
-    // card is `flex flex-col` with the button pinned via `mt-auto` so all
-    // three buttons land on the same baseline regardless of bullet count.
-    return (
-      <>
-        {showTier1 && (
+  // A Fragment, deliberately not its own wrapping flex div — the caller
+  // (/matches, /account) already provides one shared `flex flex-wrap` row
+  // that this and Tier3RequestCard both render directly into. A nested flex
+  // container here would make the *whole* Tier1+Tier2 block act as a
+  // single flex item from the outer row's perspective — real bug found
+  // live 2026-10-24: Tier 3 kept wrapping onto its own line no matter how
+  // narrow Tier1/Tier2's min-width got, because the outer row was only
+  // ever flexing two items (this whole block, and Tier3's card), never
+  // the three individual cards a user actually sees.
+  //
+  // Bronze/Silver/Gold (this card's two, Tier 3's gold lives in
+  // tier3-request.tsx) applies to the badge/border/background tint only —
+  // the action button stays visually identical across all three cards on
+  // purpose (explicit feedback: "buttons must be consistent"), and each
+  // card is `flex flex-col` with the button pinned via `mt-auto` so all
+  // three buttons land on the same baseline regardless of bullet count.
+  return (
+    <>
+      {showTier1 && (
           <div className="flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
             <div className="bg-linear-to-br from-amber-800 to-amber-700 px-5 pt-5 pb-9">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-100">Bronze</p>
@@ -127,7 +111,7 @@ export function TierUpgradeOptions({
           <div className="flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
             <div className="bg-linear-to-br from-slate-600 to-slate-500 px-5 pt-5 pb-9">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-100">Silver</p>
-              <p className="text-lg font-bold text-white">€{TIER2_PRICE_EUR}</p>
+              <p className="text-lg font-bold text-white">€{getTier2PriceEur(effectiveTier)}</p>
             </div>
             <div className="flex flex-1 flex-col p-5 pt-0">
               <TierBadge icon={Award} iconColorClass="text-slate-600" starCount={2} />
@@ -161,51 +145,6 @@ export function TierUpgradeOptions({
             </div>
           </div>
         )}
-      </>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {showTier1 && (
-        <div className="rounded-2xl bg-emerald-50/60 p-4">
-          <p className="text-sm font-semibold text-emerald-900">
-            Unlock all your matches — €{TIER1_PRICE_EUR}
-          </p>
-          <p className="mt-1 text-sm leading-6 text-emerald-800">
-            See every matching opportunity (not just one), plus a quick human review of your
-            profile.
-          </p>
-          <a
-            href={getTier1PaymentLink()}
-            className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-          >
-            Unlock — €{TIER1_PRICE_EUR}
-          </a>
-        </div>
-      )}
-
-      {showTier2 && (
-        <div className="rounded-2xl bg-emerald-50/60 p-4">
-          <p className="text-sm font-semibold text-emerald-900">
-            Get application support — €{TIER2_PRICE_EUR}
-          </p>
-          <ol className="mt-2 space-y-1.5 text-sm leading-6 text-emerald-800">
-            <li>1. A CV and cover letter prepared for each application you submit</li>
-            <li>2. Personalized advice on how to apply</li>
-            <li>3. One structured interview to help you get ready</li>
-            <li>4. Priority notice when new matching opportunities are added</li>
-            <li>5. Live two-way messaging with our team</li>
-          </ol>
-          <p className="mt-2 text-xs text-emerald-700">You still submit your own applications.</p>
-          <a
-            href={getTier2PaymentLink()}
-            className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-          >
-            Get started — €{TIER2_PRICE_EUR}
-          </a>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

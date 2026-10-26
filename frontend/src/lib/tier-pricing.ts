@@ -1,3 +1,5 @@
+import type { EffectiveTier } from '@/lib/contracts/account';
+
 // Config for the Tier 1/2 purchases — see Monetization-Strategy.md §4.1.
 // Same "founder pastes the real Stripe Payment Link into .env.local,
 // feature silently disabled if unset" pattern as application-help.ts's
@@ -7,6 +9,17 @@
 // backend/Endpoints/PurchasesEndpoints.cs for what happens with that id.
 const TIER1_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER1_PAYMENT_LINK ?? '';
 const TIER2_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK ?? '';
+
+// Tier2's one carry-up scenario (round 6) — a user who already paid Tier1's
+// €30 pays €120, not €150, mirroring Tier3's carry-up pattern below but
+// simpler (only one credit source exists below Tier2, so one extra link is
+// enough — see backend/Services/Tier2PricingCalculator.cs for the matching
+// server-side amount, which is what actually gets verified). Empty until
+// the founder creates this Payment Link in the Stripe dashboard and sets
+// NEXT_PUBLIC_TIER2_PAYMENT_LINK_FROM_TIER1 — until then, every helper below
+// gracefully falls back to the full-price link/amount, same "silently
+// disabled if unset" discipline every other link here already follows.
+const TIER2_PAYMENT_LINK_FROM_TIER1 = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK_FROM_TIER1 ?? '';
 
 // Single source of truth for the *displayed* prices only — kept in sync by
 // hand with backend/Services/TierPricing.cs (the numbers that actually gate
@@ -68,6 +81,14 @@ export function isTier2PurchaseEnabled(): boolean {
   return TIER2_PAYMENT_LINK.length > 0;
 }
 
-export function getTier2PaymentLink(): string {
-  return TIER2_PAYMENT_LINK;
+function tier2HasCarryUpDiscount(effectiveTier: EffectiveTier): boolean {
+  return effectiveTier === 'Tier1' && TIER2_PAYMENT_LINK_FROM_TIER1.length > 0;
+}
+
+export function getTier2PaymentLink(effectiveTier: EffectiveTier): string {
+  return tier2HasCarryUpDiscount(effectiveTier) ? TIER2_PAYMENT_LINK_FROM_TIER1 : TIER2_PAYMENT_LINK;
+}
+
+export function getTier2PriceEur(effectiveTier: EffectiveTier): number {
+  return tier2HasCarryUpDiscount(effectiveTier) ? TIER2_PRICE_EUR - TIER1_PRICE_EUR : TIER2_PRICE_EUR;
 }

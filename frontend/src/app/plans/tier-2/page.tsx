@@ -1,24 +1,55 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Award, CheckCircle2 } from 'lucide-react';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
-import { TIER2_PRICE_EUR, getTier2PaymentLink, isTier2PurchaseEnabled } from '@/lib/tier-pricing';
+import { fetchMyAccount } from '@/lib/api/account';
+import { getTier2PaymentLink, getTier2PriceEur, isTier2PurchaseEnabled } from '@/lib/tier-pricing';
+import type { EffectiveTier } from '@/lib/contracts/account';
 
-function UnlockButton() {
-  if (!isTier2PurchaseEnabled()) {
-    return (
-      <p className="text-sm text-slate-500">
-        Payment isn&apos;t set up yet for this account — contact us via Messages.
-      </p>
-    );
-  }
+// Round 6: this page used to render a static price/link (TIER2_PRICE_EUR,
+// getTier2PaymentLink() with no args) since it was a plain, session-unaware
+// public page. Tier2's new carry-up discount (€120 instead of €150 for a
+// user who already paid Tier1) needs to know the viewer's effectiveTier, so
+// this block self-fetches the account the same way Tier3RequestCard
+// already does (tier3-request.tsx) rather than making the whole page a
+// server-side, session-gated route — a signed-out or not-yet-loaded visitor
+// just sees the full, undiscounted price/link, never a broken state.
+function PriceAndUnlockButton() {
+  const [effectiveTier, setEffectiveTier] = useState<EffectiveTier>('Free');
+
+  useEffect(() => {
+    fetchMyAccount()
+      .then((account) => setEffectiveTier(account.effectiveTier))
+      .catch(() => {
+        // Signed out, or any fetch failure — stays at the 'Free' default,
+        // which is exactly the correct (undiscounted) price/link for an
+        // anonymous visitor anyway.
+      });
+  }, []);
+
+  const priceEur = getTier2PriceEur(effectiveTier);
+
   return (
-    <a
-      href={getTier2PaymentLink()}
-      className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600"
-    >
-      Unlock — €{TIER2_PRICE_EUR}
-    </a>
+    <>
+      <p className="mt-2 text-xl font-semibold text-slate-100">€{priceEur}</p>
+      <div className="mt-6">
+        {isTier2PurchaseEnabled() ? (
+          <a
+            href={getTier2PaymentLink(effectiveTier)}
+            className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-6 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          >
+            Unlock — €{priceEur}
+          </a>
+        ) : (
+          <p className="text-sm text-slate-500">
+            Payment isn&apos;t set up yet for this account — contact us via Messages.
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -39,10 +70,7 @@ export default function Tier2PlanPage() {
           <div className="bg-linear-to-br from-slate-600 to-slate-500 px-6 pt-10 pb-14 sm:px-10">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-100">Silver — Tier 2</p>
             <h1 className="mt-2 text-3xl font-bold text-white">Get application support</h1>
-            <p className="mt-2 text-xl font-semibold text-slate-100">€{TIER2_PRICE_EUR}</p>
-            <div className="mt-6">
-              <UnlockButton />
-            </div>
+            <PriceAndUnlockButton />
           </div>
 
           <div className="space-y-10 px-6 pt-0 pb-10 sm:px-10">

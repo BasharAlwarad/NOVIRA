@@ -73,9 +73,13 @@ public static class PurchasesEndpoints
             // Tier 3's upfront amount is carry-up adjusted per user (see
             // Tier3PricingCalculator) and frozen onto the case at
             // send-agreement time — never TierPricing's flat constant,
-            // unlike Tier1/2. Also requires the agreement to actually have
+            // unlike Tier1. Also requires the agreement to actually have
             // been sent and signed first; payment is never sufficient on
             // its own for this tier, since it's not self-checkout.
+            //
+            // Tier 2 also carries up a credit (Tier2PricingCalculator) but,
+            // unlike Tier3, stays self-checkout — no agreement/signature
+            // gate, just recomputed fresh from the Purchase ledger here.
             Tier3Case? tier3Case = null;
             int expectedAmountEur;
             if (tier == PurchaseTier.Tier3)
@@ -90,6 +94,11 @@ public static class PurchasesEndpoints
                     return Results.BadRequest(new { message = "Please sign the agreement before paying." });
                 }
                 expectedAmountEur = tier3Case.UpfrontAmountEur.Value;
+            }
+            else if (tier == PurchaseTier.Tier2)
+            {
+                var priorPurchases = await db.Purchases.Where(p => p.UserId == user.Id).ToListAsync();
+                expectedAmountEur = Tier2PricingCalculator.GetExpectedAmountEur(priorPurchases);
             }
             else
             {
