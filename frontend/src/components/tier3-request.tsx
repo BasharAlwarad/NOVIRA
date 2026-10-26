@@ -1,8 +1,16 @@
 'use client';
 
+import Link from 'next/link';
+import { CheckCircle2, Crown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { fetchMyTier3Case, requestTier3, signTier3Agreement } from '@/lib/api/tier3';
-import { getTier3PaymentLink, getTier3SuccessFeePaymentLink, TIER3_SUCCESS_FEE_EUR } from '@/lib/tier-pricing';
+import {
+  getTier3PaymentLink,
+  getTier3SuccessFeePaymentLink,
+  TIER3_SUCCESS_FEE_EUR,
+  TIER3_UPFRONT_EUR,
+} from '@/lib/tier-pricing';
+import { TierBadge } from '@/components/tier-badge';
 import type { Tier3Case, Tier3CaseStatus } from '@/lib/contracts/tier3';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
@@ -250,23 +258,46 @@ export function Tier3RequestCard({
   };
 
   if (compact) {
+    // Gold, matching the Bronze/Silver treatment tier-upgrade-options.tsx
+    // gives Tier 1/2 — badge/border/background only, the action button
+    // itself stays the same green/size/position as the other two cards
+    // ("buttons must be consistent" was explicit feedback). Unlike
+    // Tier 1/2, this button still triggers the real request flow (no
+    // instant payment — see Architecture.md's Tier 3 sections for why),
+    // just labeled with a visible starting price so it reads consistently
+    // with "Unlock — €X" alongside it.
     return (
-      <div className="min-w-48 flex-1 space-y-2 rounded-3xl border border-slate-300 bg-slate-50 p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Tier 3</p>
-        <h3 className="text-base font-bold text-slate-900">Want full-service help?</h3>
-        <p className="text-sm leading-6 text-slate-600">
-          We help you complete and submit your application under a signed agreement, after a real
-          conversation first.
-        </p>
-        <button
-          type="button"
-          onClick={handleRequest}
-          disabled={submitting}
-          className="mt-1 inline-flex h-9 items-center justify-center rounded-full bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {submitting ? 'Sending…' : 'Request full-service help'}
-        </button>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="relative flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
+        <div className="bg-linear-to-br from-yellow-600 to-yellow-500 px-5 pt-5 pb-9">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-yellow-100">Gold</p>
+          <p className="text-lg font-bold text-white">from €{TIER3_UPFRONT_EUR}</p>
+        </div>
+        <div className="flex flex-1 flex-col p-5 pt-0">
+          <TierBadge icon={Crown} iconColorClass="text-yellow-600" starCount={3} />
+          <h3 className="mt-2 text-center text-base font-bold text-slate-900">Want full-service help?</h3>
+          <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-600">
+            <li className="flex items-start gap-1.5">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-yellow-700" />
+              <span>We help you complete and submit your application</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-yellow-700" />
+              <span>A real conversation first, under a signed agreement</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-yellow-700" />
+              <span>Ongoing support throughout your case</span>
+            </li>
+          </ul>
+          <div className="mt-auto pt-3">
+            <Link
+              href="/plans/tier-3"
+              className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
+            >
+              Read more
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { Award, CheckCircle2, Medal } from 'lucide-react';
 import {
   TIER1_PRICE_EUR,
   TIER2_PRICE_EUR,
@@ -6,6 +8,7 @@ import {
   isTier1PurchaseEnabled,
   isTier2PurchaseEnabled,
 } from '@/lib/tier-pricing';
+import { TierBadge } from '@/components/tier-badge';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
 const TIER_RANK: Record<EffectiveTier, number> = { Free: 0, Tier1: 1, Tier2: 2, Tier3: 3 };
@@ -72,45 +75,90 @@ export function TierUpgradeOptions({
     // narrow Tier1/Tier2's min-width got, because the outer row was only
     // ever flexing two items (this whole block, and Tier3's card), never
     // the three individual cards a user actually sees.
+    //
+    // Bronze/Silver/Gold (this card's two, Tier 3's gold lives in
+    // tier3-request.tsx) applies to the badge/border/background tint only —
+    // the action button stays visually identical across all three cards on
+    // purpose (explicit feedback: "buttons must be consistent"), and each
+    // card is `flex flex-col` with the button pinned via `mt-auto` so all
+    // three buttons land on the same baseline regardless of bullet count.
     return (
       <>
         {showTier1 && (
-          <div className="min-w-48 flex-1 space-y-2 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Tier 1 — €{TIER1_PRICE_EUR}
-            </p>
-            <h3 className="text-base font-bold text-emerald-950">
-              {blurredCount !== undefined && blurredCount > 0
-                ? `Unlock all ${blurredCount + 1} matches`
-                : 'Unlock every match'}
-            </h3>
-            <p className="text-sm leading-6 text-emerald-800">
-              Every opportunity that fits your profile, plus a human review.
-            </p>
-            <a
-              href={getTier1PaymentLink()}
-              className="mt-1 inline-flex h-9 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
-            >
-              Unlock — €{TIER1_PRICE_EUR}
-            </a>
+          <div className="flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
+            <div className="bg-linear-to-br from-amber-800 to-amber-700 px-5 pt-5 pb-9">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-100">Bronze</p>
+              <p className="text-lg font-bold text-white">€{TIER1_PRICE_EUR}</p>
+            </div>
+            <div className="flex flex-1 flex-col p-5 pt-0">
+              <TierBadge icon={Medal} iconColorClass="text-amber-800" starCount={1} />
+              <h3 className="mt-2 text-center text-base font-bold text-slate-900">
+                {blurredCount !== undefined && blurredCount > 0
+                  ? `Unlock all ${blurredCount + 1} matches`
+                  : 'Unlock every match'}
+              </h3>
+              <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-600">
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <span>Every matching opportunity, not just one</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <span>A real human review of your profile</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <span>See how you compare to each program&apos;s real requirements</span>
+                </li>
+              </ul>
+              <div className="mt-auto pt-3">
+                <Link
+                  href="/plans/tier-1"
+                  className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                >
+                  Read more
+                </Link>
+              </div>
+            </div>
           </div>
         )}
 
         {showTier2 && (
-          <div className="min-w-48 flex-1 space-y-2 rounded-3xl bg-slate-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Tier 2 — €{TIER2_PRICE_EUR}
-            </p>
-            <h3 className="text-base font-bold text-slate-900">Get application support</h3>
-            <p className="text-sm leading-6 text-slate-600">
-              AI-drafted CVs for each application, real-time chat, and application tracking.
-            </p>
-            <a
-              href={getTier2PaymentLink()}
-              className="mt-1 inline-flex h-9 items-center justify-center rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
-            >
-              Get started — €{TIER2_PRICE_EUR}
-            </a>
+          <div className="flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
+            <div className="bg-linear-to-br from-slate-600 to-slate-500 px-5 pt-5 pb-9">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-100">Silver</p>
+              <p className="text-lg font-bold text-white">€{TIER2_PRICE_EUR}</p>
+            </div>
+            <div className="flex flex-1 flex-col p-5 pt-0">
+              <TierBadge icon={Award} iconColorClass="text-slate-600" starCount={2} />
+              <h3 className="mt-2 text-center text-base font-bold text-slate-900">Get application support</h3>
+              <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-600">
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <span>A CV and cover letter for every application</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <span>One structured interview to help you prepare</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <span>Direct messaging with our team</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <span>Priority notice on new matches</span>
+                </li>
+              </ul>
+              <div className="mt-auto pt-3">
+                <Link
+                  href="/plans/tier-2"
+                  className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                >
+                  Read more
+                </Link>
+              </div>
+            </div>
           </div>
         )}
       </>
