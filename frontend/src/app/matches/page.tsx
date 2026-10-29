@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { Info } from 'lucide-react';
 import { getCurrentUser } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
 import { listMyCvRequests, requestCv } from '@/lib/api/cv-requests';
@@ -755,6 +756,48 @@ function SectionTabs({ counts }: { counts: Record<MatchTab, number> }) {
   );
 }
 
+// Round 9: replaces the old eyebrow label + "Matching opportunities" h1 +
+// count pill + always-visible disclaimer paragraph with a single compact
+// "Your matches: N" line and this small info button — the disclaimer text
+// is unchanged, just moved into a click-to-open popover instead of being
+// shown unconditionally. Click-outside-to-close mirrors AccountMenu's
+// existing pattern (account/page.tsx) rather than inventing a new one.
+function MatchesInfoButton() {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="How matches are determined"
+        className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+      >
+        <Info className="h-5 w-5" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-10 mt-2 w-80 max-w-[85vw] rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+          Matched against your profile — self-reported answers, plus anything confirmed from your
+          approved documents. A licensed advisor or our own review can confirm exactly what
+          applies to your situation.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MatchesPageContent() {
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
@@ -868,31 +911,12 @@ function MatchesPageContent() {
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <SiteNav />
       <section className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
-              Your matches
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
-              Matching opportunities
-            </h1>
-            {state.status === 'loaded' && (() => {
-              const total = state.matches.length + state.blurredCount;
-              return (
-                <span className="mt-2 inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  {total} matching {total === 1 ? 'opportunity' : 'opportunities'} found
-                </span>
-              );
-            })()}
-          </div>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl">
+            Your matches{state.status === 'loaded' ? `: ${state.matches.length + state.blurredCount}` : ''}
+          </h1>
+          <MatchesInfoButton />
         </div>
-
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          Matched against your profile — self-reported answers, plus
-          anything confirmed from your approved documents. A licensed
-          advisor or our own review can confirm exactly what applies to your
-          situation.
-        </p>
 
         <div className="mt-8 space-y-4">
           {state.status === 'loading' && (

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { cancelAccountDeletion, fetchMyAccount, NotSignedInError as NoAccountSession } from '@/lib/api/account';
 import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
+import { listMyMessages } from '@/lib/api/messages';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
 import { verifySuccessFeeSession } from '@/lib/api/tier3';
 import { fetchMyIntake } from '@/lib/api/intake';
@@ -302,7 +303,12 @@ function DocumentsSection({
         <button
           type="submit"
           disabled={!file || !name.trim() || submitting}
-          className="w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+          // Explicit disabled colors instead of opacity-50 — opacity faded
+          // both the emerald bg and near-black text toward white together,
+          // landing around 3:1 contrast (fails WCAG AA's 4.5:1 for this
+          // text size). slate-200/slate-600 reads clearly as inactive
+          // while staying legible (~5:1).
+          className="w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600"
         >
           {submitting ? 'Uploading…' : 'Upload document'}
         </button>
@@ -611,22 +617,39 @@ function ProfileTabs({ account, intakeStatus }: { account: Account; intakeStatus
 // Messages moved to their own route (point 7 of the 2026-10-04 UI/UX
 // hardening pass) — this is just a short teaser card linking there, not the
 // conversation itself (that lives in MessagesPanel, shared with the
-// floating contact drawer). Keeps /account from needing its own
-// fetch/poll/live-push wiring for messages at all anymore.
+// floating contact drawer). Deliberately still no poll/live-push wiring
+// here (that stays SiteNav's job) — just one fetch on mount to show whether
+// there's anything new, since the nav already tracks this but a user has to
+// notice a small dot there before clicking through twice to find out.
 function MessagesTeaser({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   const canReply = effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
+  const [hasUnread, setHasUnread] = useState(false);
+
+  useEffect(() => {
+    listMyMessages()
+      .then((messages) => setHasUnread(messages.some((message) => message.readAt === null)))
+      .catch(() => {});
+  }, []);
+
   return (
     <Link
       href="/account/messages"
       className="block rounded-3xl border border-slate-200 bg-white p-5 transition hover:border-emerald-300"
     >
-      <h2 className="text-sm font-semibold text-slate-900">Messages</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-slate-900">Messages</h2>
+        {hasUnread && (
+          <span className="h-2 w-2 rounded-full bg-emerald-400" aria-label="New message" />
+        )}
+      </div>
       <p className="mt-1 text-xs text-slate-500">
         {canReply
           ? 'Live chat with our team — replies arrive instantly.'
           : 'Updates from our team — document decisions and anything else we send you land here.'}
       </p>
-      <p className="mt-3 text-sm font-semibold text-emerald-700">Open messages →</p>
+      <p className="mt-3 text-sm font-semibold text-emerald-700">
+        {hasUnread ? 'You have new messages →' : 'Open messages →'}
+      </p>
     </Link>
   );
 }

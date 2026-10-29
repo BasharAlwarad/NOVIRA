@@ -227,8 +227,15 @@ export function Tier3RequestCard({
     }
 
     return (
-      <div className={`rounded-2xl bg-slate-50 p-4 ${fullWidthIfCompact}`}>
-        <p className="text-sm font-semibold text-slate-900">Your full-service request</p>
+      // Yellow tint + Crown icon ties this to the Gold/Tier3 medallion
+      // banner above it on /account (CurrentPlanBanner) — was a plain
+      // bg-slate-50 box with no visual link to the tier it belongs to,
+      // found live to read like an unrelated leftover section.
+      <div className={`rounded-2xl border border-yellow-200 bg-yellow-50/60 p-4 ${fullWidthIfCompact}`}>
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+          <Crown className="h-4 w-4 shrink-0 text-yellow-600" aria-hidden="true" />
+          Your full-service request
+        </p>
         <p className="mt-1 text-sm text-slate-600">{TIER3_STATUS_LABELS[tier3Case.status]}</p>
         {tier3Case.targetOpportunityTitle && (
           <p className="mt-1 text-xs text-slate-500">

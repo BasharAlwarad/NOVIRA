@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Lock } from 'lucide-react';
 import { listMyMessages, markAllMessagesRead, sendMyMessage } from '@/lib/api/messages';
 import type { Message } from '@/lib/contracts/messages';
 import type { EffectiveTier } from '@/lib/contracts/account';
@@ -201,7 +202,7 @@ export function MessagesPanel({
         )}
       </div>
 
-      {canReply && (
+      {canReply ? (
         <form onSubmit={handleSend} className="shrink-0 border-t border-slate-100 p-3">
           <div className="flex items-end gap-2">
             <textarea
@@ -221,6 +222,17 @@ export function MessagesPanel({
           </div>
           {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
         </form>
+      ) : (
+        // Replaces the old behavior of just hiding the input entirely with
+        // no explanation — tells a Free/Tier1 viewer exactly why there's no
+        // input here and that this is still a one-way channel, not broken.
+        <div className="flex shrink-0 items-center gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
+          <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+          <p className="text-xs text-slate-500">
+            Sending messages is part of Tier 2 and above — you&apos;ll still receive messages and
+            updates from our team here.
+          </p>
+        </div>
       )}
     </div>
   );

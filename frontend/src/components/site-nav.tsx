@@ -109,21 +109,30 @@ export function SiteNav() {
     <>
     <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <Link href="/" className="group flex items-center gap-3 text-white">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/15 text-lg font-black text-emerald-300 ring-1 ring-emerald-400/30 transition group-hover:bg-emerald-400/25">
+        {/* min-w-0 + truncate: without it, flex children never shrink below
+            their text's natural content width, so at narrow (mobile) widths
+            this block and the button group on the right fought for space —
+            found live via a real measured 4-9px of horizontal page overflow
+            at 390px width, with "Sign in"/"My matches" visibly overlapping
+            the subtitle text. The subtitle now truncates with an ellipsis
+            instead of wrapping unpredictably, and shrink-0 on the button
+            group (below) means it's always this block that gives way, never
+            the buttons. */}
+        <Link href="/" className="group flex min-w-0 items-center gap-3 text-white">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/15 text-lg font-black text-emerald-300 ring-1 ring-emerald-400/30 transition group-hover:bg-emerald-400/25">
             N
           </div>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-200">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold uppercase tracking-[0.28em] text-emerald-200">
               NOVIRA
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="truncate text-xs text-slate-400">
               Study and work guidance in Germany
             </p>
           </div>
         </Link>
 
-        <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
+        <nav aria-label="Primary" className="hidden shrink-0 items-center gap-6 md:flex">
           {/* Doesn't make sense to keep inviting a retake once a profile
               already exists (point 4) — signed-out visitors and fresh
               signups with no profile yet still see it. */}
@@ -185,7 +194,7 @@ export function SiteNav() {
           )}
         </nav>
 
-        <div className="flex items-center gap-3 md:hidden">
+        <div className="flex shrink-0 items-center gap-3 md:hidden">
           {signedIn === false && (
             <Link
               href="/signin"

@@ -33,7 +33,7 @@ export function GermanyMatchesMap({ stateBreakdown }: { stateBreakdown: StateCou
     <div className="isolate overflow-hidden rounded-3xl border border-slate-200">
       <MapContainer
         center={GERMANY_CENTER}
-        zoom={6}
+        zoom={5}
         minZoom={5}
         maxZoom={8}
         scrollWheelZoom={false}
