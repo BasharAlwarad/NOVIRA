@@ -9,15 +9,14 @@ import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
 import { listMyMessages } from '@/lib/api/messages';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
 import { verifySuccessFeeSession } from '@/lib/api/tier3';
-import { fetchMyIntake } from '@/lib/api/intake';
 import type { Account, EffectiveTier } from '@/lib/contracts/account';
 import type { UserDocumentSummary } from '@/lib/contracts/documents';
-import type { IntakeStatus } from '@/lib/contracts/intake';
 import type { PurchaseTier } from '@/lib/contracts/purchases';
-import { Award, Crown, Medal, Sparkles } from 'lucide-react';
 import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
 import { Tier3RequestCard } from '@/components/tier3-request';
-import { TierBadge } from '@/components/tier-badge';
+import { CollapsibleSection } from '@/components/collapsible-section';
+import { CurrentTierBadge } from '@/components/current-tier-badge';
+import { EditableProfileSection } from '@/components/editable-profile-section';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -66,138 +65,6 @@ function NoProfileBanner() {
       >
         Take the assessment
       </Link>
-    </section>
-  );
-}
-
-function ProfileSection({ account }: { account: Account }) {
-  const fields: [string, string | null][] = [
-    ['Country', account.country],
-    ['Age', account.age],
-    ['Highest education', account.highestEducation],
-    ['Occupation field', account.occupationField],
-    ['Desired path', account.desiredPath],
-    ['German level', account.germanLevel],
-    ['English level', account.englishLevel],
-    ['Passport status', account.passportStatus],
-    ['Financial situation', account.financialSituation],
-    ['Start timeline', account.startTimeline],
-  ];
-
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Your profile</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Self-reported from your assessment — not yet independently verified.
-          </p>
-        </div>
-        <Link
-          href="/assessment/edit"
-          className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          Edit my profile
-        </Link>
-      </div>
-      <dl className="mt-4 grid grid-cols-1 gap-2 text-xs text-slate-600 sm:grid-cols-2">
-        {fields.map(([label, value]) => (
-          <div key={label}>
-            <dt className="inline font-semibold">{label}: </dt>
-            <dd className="inline">{value ?? '—'}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  );
-}
-
-// Only rendered when at least one Verified* field is set — populated once
-// an admin approves a document that contained it (Level 3 of the four-level
-// model, see backend/Models/User.cs). Styled distinctly from ProfileSection
-// above (which stays "not yet independently verified", scoped correctly to
-// the self-reported fields only).
-function VerifiedSection({ account }: { account: Account }) {
-  const allFields: [string, string | null][] = [
-    ['Full name', account.verifiedFullName],
-    ['Date of birth', account.verifiedDateOfBirth],
-    ['Nationality', account.verifiedNationality],
-    ['Passport number', account.verifiedPassportNumber],
-    ['Passport status', account.verifiedPassportStatus],
-    ['Passport expiry', account.verifiedPassportExpiryDate],
-    ['Highest education', account.verifiedHighestEducation],
-    ['Field of study', account.verifiedFieldOfStudy],
-    ['Occupation field', account.verifiedOccupationField],
-    ['German level', account.verifiedGermanLevel],
-    ['English level', account.verifiedEnglishLevel],
-    // A boolean, not a value to display as-is — only shown once true (a
-    // false/absent certificate isn't "verified data," just nothing yet).
-    ['Certified language proof', account.verifiedHasCertifiedLanguageProof ? 'Yes' : null],
-  ];
-  const fields = allFields.filter(([, value]) => value !== null);
-
-  if (fields.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5">
-      <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-emerald-900">Verified from your documents</h2>
-        <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-          Confirmed
-        </span>
-      </div>
-      <p className="mt-1 text-xs text-emerald-800">
-        Confirmed by our team from a document you uploaded — used to find better matches.
-      </p>
-      <dl className="mt-4 grid grid-cols-1 gap-2 text-xs text-emerald-900 sm:grid-cols-2">
-        {fields.map(([label, value]) => (
-          <div key={label}>
-            <dt className="inline font-semibold">{label}: </dt>
-            <dd className="inline">{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  );
-}
-
-const INTAKE_STATUS_LABELS: Record<IntakeStatus, string> = {
-  NotStarted: 'Not started yet',
-  InProgress: "In progress — pick up where you left off",
-  Submitted: 'Submitted for review',
-};
-
-// Promoted to a real card near the top of the page (2026-10-01) — was a
-// small text link at the bottom, which the founder correctly flagged as
-// easy to miss and a poor way to advertise a real feature. `status` is
-// fetched best-effort alongside the rest of the page; a `null` (fetch
-// failed, or hasn't resolved yet) still renders the card with the
-// not-started copy rather than hiding it, since the link itself works
-// regardless of whether the status fetch succeeded.
-function CvProfileSection({ status }: { status: IntakeStatus | null }) {
-  const effectiveStatus = status ?? 'NotStarted';
-  return (
-    <section className="rounded-3xl border border-emerald-200 bg-emerald-50/40 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-semibold text-emerald-900">CV profile</h2>
-          <p className="mt-1 text-sm leading-6 text-emerald-800">
-            Your work history, education detail, and skills — filled in once, used to build a
-            tailored CV whenever you request one for a specific match.
-          </p>
-          <p className="mt-2 text-xs font-semibold text-emerald-700">
-            Status: {INTAKE_STATUS_LABELS[effectiveStatus]}
-          </p>
-        </div>
-        <Link
-          href="/account/intake"
-          className="inline-flex h-10 shrink-0 items-center justify-center rounded-full bg-emerald-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
-        >
-          {effectiveStatus === 'NotStarted' ? 'Build your CV profile' : 'Edit your CV profile'}
-        </Link>
-      </div>
     </section>
   );
 }
@@ -356,64 +223,13 @@ function DocumentsSection({
 
 
 // Plain-text labels for toast/confirmation copy (e.g. "Payment confirmed —
-// you're on Tier 2 — Application support.") — distinct from
-// CURRENT_PLAN_CONFIG below, which drives the visual banner.
+// you're on Tier 2 — Application support.").
 const TIER_LABELS: Record<EffectiveTier, string> = {
   Free: 'Free',
   Tier1: 'Tier 1 — Unlock all matches',
   Tier2: 'Tier 2 — Application support',
   Tier3: 'Tier 3 — Full service',
 };
-
-const CURRENT_PLAN_CONFIG: Record<
-  Exclude<EffectiveTier, 'Free'>,
-  { label: string; gradient: string; icon: typeof Medal; iconColorClass: string; stars: number }
-> = {
-  Tier1: { label: 'Bronze — Tier 1', gradient: 'from-amber-800 to-amber-700', icon: Medal, iconColorClass: 'text-amber-800', stars: 1 },
-  Tier2: { label: 'Silver — Tier 2', gradient: 'from-slate-600 to-slate-500', icon: Award, iconColorClass: 'text-slate-600', stars: 2 },
-  Tier3: { label: 'Gold — Tier 3', gradient: 'from-yellow-600 to-yellow-500', icon: Crown, iconColorClass: 'text-yellow-600', stars: 3 },
-};
-
-// "Where the user unlocks... shows what tier or level he is on and what can
-// he unlock" — the founder's own framing for where this belongs. Round 6
-// replaces the old plain-text "Your plan: Tier 2 — Application support"
-// line with the same bronze/silver/gold medallion+star visual language
-// already built for /matches and /plans/tier-X (TierBadge,
-// @/components/tier-badge) — status, not a purchase pitch, so no CTA here.
-// Free gets a deliberately neutral (not one of the three tier colors)
-// treatment with no stars, since there's no rank to show yet.
-function CurrentPlanBanner({ effectiveTier }: { effectiveTier: EffectiveTier }) {
-  if (effectiveTier === 'Free') {
-    return (
-      <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-        <div className="bg-linear-to-br from-slate-300 to-slate-200 px-6 pt-6 pb-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Your current plan</p>
-          <h2 className="mt-1 text-xl font-bold text-slate-800">Free</h2>
-        </div>
-        <div className="flex flex-col items-center px-6 pb-6">
-          <TierBadge icon={Sparkles} iconColorClass="text-slate-500" starCount={0} />
-          <p className="mt-2 text-center text-sm text-slate-600">
-            You&apos;re on the free plan — upgrade below for more.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const config = CURRENT_PLAN_CONFIG[effectiveTier];
-  return (
-    <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-      <div className={`bg-linear-to-br ${config.gradient} px-6 pt-6 pb-10`}>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Your current plan</p>
-        <h2 className="mt-1 text-xl font-bold text-white">{config.label}</h2>
-      </div>
-      <div className="flex flex-col items-center px-6 pb-6">
-        <TierBadge icon={config.icon} iconColorClass={config.iconColorClass} starCount={config.stars} />
-        <p className="mt-2 text-center text-sm text-slate-600">You&apos;re all set at this level.</p>
-      </div>
-    </div>
-  );
-}
 
 // Tier 2's upsell (added 2026-09-29) deliberately describes only what the
 // tier IS (Monetization-Strategy.md §4.1's real scope), not how it's
@@ -426,28 +242,19 @@ function CurrentPlanBanner({ effectiveTier }: { effectiveTier: EffectiveTier }) 
 //
 // Round 6: the upgrade cards below switch to `compact` — the exact same
 // gradient/medallion/star card component /matches uses, replacing the old
-// plain stacked green boxes this section used to render.
+// plain stacked green boxes this section used to render. The "what plan am
+// I on" status itself moved out of this section entirely (2026-11-01) —
+// see CurrentTierBadge, now a small pill under the page header's "Account
+// settings" dropdown instead of a full-width banner here — so this section
+// is just the CollapsibleSection now, same as /matches (round 21).
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4">
-      <h2 className="px-1 text-sm font-semibold text-slate-900">Your plan</h2>
-
-      <div className="mt-4">
-        <CurrentPlanBanner effectiveTier={effectiveTier} />
-      </div>
-
-      {/* -mx-2 + gap-3 (vs. the compact row's usual gap-4 on /matches,
-          which has more room) claws back just enough width for all three
-          cards to sit on one line within this page's narrower, padded
-          card — /account's max-w-2xl matches /matches', but this section's
-          own p-4 wrapper eats into it, so the unmodified /matches spacing
-          wraps Gold onto its own row here. Verified via real browser
-          bounding-box checks, not just visual inspection. */}
-      <div className="mt-4 -mx-2 flex flex-wrap gap-3">
+    <CollapsibleSection title="Upgrade options">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <TierUpgradeOptions effectiveTier={effectiveTier} />
         <Tier3RequestCard effectiveTier={effectiveTier} compact />
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }
 
@@ -564,56 +371,6 @@ function PendingDeletionBanner({ scheduledFor }: { scheduledFor: string }) {
   );
 }
 
-// Collapses the CV profile and self-reported profile into tabs (point 6 of
-// the 2026-10-04 UI/UX hardening pass) — the founder's own complaint:
-// having both as big, always-expanded cards reads as confusing/redundant,
-// especially once a user is paying for the CV service. The fix that was
-// agreed is purely this — visual decluttering — not a backend field lock:
-// checked the self-report model and found it never even collects true
-// identity facts (name/DOB/nationality/passport number) in the first
-// place, so there's nothing there to protect that isn't already protected
-// by simply not existing as a self-edit path. Verified data stays paired
-// with the Profile tab, since it's the confirmed version of the same
-// fields, not a third separate concern.
-function ProfileTabs({ account, intakeStatus }: { account: Account; intakeStatus: IntakeStatus | null }) {
-  const [tab, setTab] = useState<'cv' | 'profile'>('cv');
-
-  return (
-    <div>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTab('cv')}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-            tab === 'cv' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          CV profile
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('profile')}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-            tab === 'profile' ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Your profile
-        </button>
-      </div>
-
-      <div className="mt-4 space-y-6">
-        {tab === 'cv' && <CvProfileSection status={intakeStatus} />}
-        {tab === 'profile' && (
-          <>
-            <ProfileSection account={account} />
-            <VerifiedSection account={account} />
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Messages moved to their own route (point 7 of the 2026-10-04 UI/UX
 // hardening pass) — this is just a short teaser card linking there, not the
 // conversation itself (that lives in MessagesPanel, shared with the
@@ -664,7 +421,6 @@ export default function AccountPage() {
   const router = useRouter();
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const [documents, setDocuments] = useState<UserDocumentSummary[] | null>(null);
-  const [intakeStatus, setIntakeStatus] = useState<IntakeStatus | null>(null);
   const [justUpdated, setJustUpdated] = useState(false);
   const [checkoutMessage, setCheckoutMessage] = useState<{ text: string; isError: boolean } | null>(
     null
@@ -679,28 +435,16 @@ export default function AccountPage() {
       });
   }, []);
 
-  const loadIntakeStatus = useCallback(() => {
-    fetchMyIntake()
-      .then((response) => setIntakeStatus(response.profile?.status ?? 'NotStarted'))
-      .catch(() => {
-        // Best-effort, same reasoning as loadDocuments/loadMessages above —
-        // CvProfileSection just falls back to its default "not started"
-        // copy rather than the page failing to load (the lesson from the
-        // /matches CV-requests bug found live 2026-10-01).
-      });
-  }, []);
-
   useEffect(() => {
     fetchMyAccount()
       .then((account) => {
         setState({ status: 'loaded', account });
         loadDocuments();
-        loadIntakeStatus();
       })
       .catch((error) => {
         setState({ status: error instanceof NoAccountSession ? 'not-signed-in' : 'error' });
       });
-  }, [loadDocuments, loadIntakeStatus]);
+  }, [loadDocuments]);
 
   // Landed here from /assessment/edit's redirectTo="/account?updated=1" —
   // read directly off window.location rather than useSearchParams() to
@@ -801,7 +545,12 @@ export default function AccountPage() {
               Profile, documents &amp; messages
             </h1>
           </div>
-          {state.status === 'loaded' && <AccountMenu onLogout={handleLogout} />}
+          {state.status === 'loaded' && (
+            <div className="flex flex-col items-end gap-2">
+              <AccountMenu onLogout={handleLogout} />
+              <CurrentTierBadge effectiveTier={state.account.effectiveTier} />
+            </div>
+          )}
         </div>
 
         {state.status === 'loaded' && (
@@ -856,7 +605,7 @@ export default function AccountPage() {
               )}
               {!state.account.profileUpdatedAt && <NoProfileBanner />}
               <PlanSection effectiveTier={state.account.effectiveTier} />
-              <ProfileTabs account={state.account} intakeStatus={intakeStatus} />
+              <EditableProfileSection account={state.account} />
               <DocumentsSection documents={documents} onUploaded={loadDocuments} />
               <MessagesTeaser effectiveTier={state.account.effectiveTier} />
             </>

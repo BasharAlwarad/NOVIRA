@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { CheckCircle2, Medal } from 'lucide-react';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
+import { TierBadge } from '@/components/tier-badge';
 import { TIER1_PRICE_EUR, getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 
 function UnlockButton() {
@@ -50,9 +51,7 @@ export default function Tier1PlanPage() {
           </div>
 
           <div className="space-y-10 px-6 pt-0 pb-10 sm:px-10">
-            <div className="-mt-10 flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-md ring-4 ring-white">
-              <Medal className="h-10 w-10 text-amber-800" />
-            </div>
+            <TierBadge icon={Medal} variant="bronze" size="lg" />
             <section>
               <h2 className="text-lg font-bold text-slate-900">What you get</h2>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">

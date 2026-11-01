@@ -21,6 +21,7 @@ import {
 import { getTier1PaymentLink, isTier1PurchaseEnabled } from '@/lib/tier-pricing';
 import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
 import { Tier3RequestCard } from '@/components/tier3-request';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 
@@ -762,14 +763,28 @@ function SectionTabs({ counts }: { counts: Record<MatchTab, number> }) {
 // is unchanged, just moved into a click-to-open popover instead of being
 // shown unconditionally. Click-outside-to-close mirrors AccountMenu's
 // existing pattern (account/page.tsx) rather than inventing a new one.
+// The popover anchors to the wider row this button sits in (matches/page.tsx
+// gives that row `relative`), not to this small button itself — found live
+// on mobile: anchoring `left-0` to just the button (which sits well into the
+// row, after "Your matches: 35") pushed the popover's right edge past the
+// viewport. The row starts near the page's actual left padding, so anchoring
+// there instead gives it the full content width to work with, not just
+// whatever's left of the button specifically.
 function MatchesInfoButton() {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        buttonRef.current &&
+        !buttonRef.current.contains(target) &&
+        popoverRef.current &&
+        !popoverRef.current.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -778,8 +793,9 @@ function MatchesInfoButton() {
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative">
+    <>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="How matches are determined"
@@ -788,13 +804,16 @@ function MatchesInfoButton() {
         <Info className="h-5 w-5" aria-hidden="true" />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-10 mt-2 w-80 max-w-[85vw] rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+        <div
+          ref={popoverRef}
+          className="absolute left-0 right-0 top-full z-10 mt-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 shadow-[0_24px_80px_rgba(15,23,42,0.12)] sm:left-0 sm:right-auto sm:w-80"
+        >
           Matched against your profile — self-reported answers, plus anything confirmed from your
           approved documents. A licensed advisor or our own review can confirm exactly what
           applies to your situation.
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -911,7 +930,7 @@ function MatchesPageContent() {
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <SiteNav />
       <section className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
           <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl">
             Your matches{state.status === 'loaded' ? `: ${state.matches.length + state.blurredCount}` : ''}
           </h1>
@@ -979,15 +998,17 @@ function MatchesPageContent() {
                 </p>
               ) : (
                 <>
-                  <div className="flex flex-wrap gap-3">
-                    <TierUpgradeOptions
-                      effectiveTier={state.effectiveTier}
-                      blurredCount={state.blurredCount}
-                    />
-                    <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
-                  </div>
+                  <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
                   <div className="mt-4">
-                    <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
+                    <CollapsibleSection title="Upgrade options">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <TierUpgradeOptions
+                          effectiveTier={state.effectiveTier}
+                          blurredCount={state.blurredCount}
+                        />
+                        <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
+                      </div>
+                    </CollapsibleSection>
                   </div>
                   <div className="mt-6 space-y-4">
                     {state.matches.map((match) => (
@@ -1015,13 +1036,17 @@ function MatchesPageContent() {
 
           {state.status === 'loaded' && state.hasProfile && state.effectiveTier !== 'Free' && (
             <>
-              <div className="mb-6 flex flex-wrap gap-3">
-                <TierUpgradeOptions effectiveTier={state.effectiveTier} />
-                <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
+              <div className="mb-6">
+                <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
               </div>
 
               <div className="mb-6">
-                <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
+                <CollapsibleSection title="Upgrade options">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <TierUpgradeOptions effectiveTier={state.effectiveTier} />
+                    <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
+                  </div>
+                </CollapsibleSection>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">

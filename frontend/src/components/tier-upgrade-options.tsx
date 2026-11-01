@@ -1,12 +1,10 @@
-import Link from 'next/link';
-import { Award, CheckCircle2, Medal } from 'lucide-react';
 import {
   TIER1_PRICE_EUR,
   getTier2PriceEur,
   isTier1PurchaseEnabled,
   isTier2PurchaseEnabled,
 } from '@/lib/tier-pricing';
-import { TierBadge } from '@/components/tier-badge';
+import { TierCard, BRONZE_BULLETS_TAIL, SILVER_BULLETS } from '@/components/tier-card';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
 const TIER_RANK: Record<EffectiveTier, number> = { Free: 0, Tier1: 1, Tier2: 2, Tier3: 3 };
@@ -31,6 +29,11 @@ const TIER_RANK: Record<EffectiveTier, number> = { Free: 0, Tier1: 1, Tier2: 2, 
 // (a second, separate rendering branch this component used to carry) to
 // this same tight-card styling — the old branch had zero remaining callers
 // once that happened, so it was deleted rather than left as dead code.
+//
+// The card markup itself moved into the shared TierCard component
+// (tier-card.tsx) — only the per-tier price/bullet content specific to this
+// context (the dynamic match count, the carry-up Silver price) lives here
+// now.
 export function TierUpgradeOptions({
   effectiveTier,
   blurredCount,
@@ -51,100 +54,38 @@ export function TierUpgradeOptions({
   }
 
   // A Fragment, deliberately not its own wrapping flex div — the caller
-  // (/matches, /account) already provides one shared `flex flex-wrap` row
-  // that this and Tier3RequestCard both render directly into. A nested flex
-  // container here would make the *whole* Tier1+Tier2 block act as a
-  // single flex item from the outer row's perspective — real bug found
-  // live 2026-10-24: Tier 3 kept wrapping onto its own line no matter how
-  // narrow Tier1/Tier2's min-width got, because the outer row was only
-  // ever flexing two items (this whole block, and Tier3's card), never
-  // the three individual cards a user actually sees.
-  //
-  // Bronze/Silver/Gold (this card's two, Tier 3's gold lives in
-  // tier3-request.tsx) applies to the badge/border/background tint only —
-  // the action button stays visually identical across all three cards on
-  // purpose (explicit feedback: "buttons must be consistent"), and each
-  // card is `flex flex-col` with the button pinned via `mt-auto` so all
-  // three buttons land on the same baseline regardless of bullet count.
+  // (/matches, /account) already provides one shared row/grid that this and
+  // Tier3RequestCard both render directly into. A nested flex container
+  // here would make the *whole* Tier1+Tier2 block act as a single flex item
+  // from the outer row's perspective — real bug found live 2026-10-24: Tier
+  // 3 kept wrapping onto its own line no matter how narrow Tier1/Tier2's
+  // min-width got, because the outer row was only ever flexing two items
+  // (this whole block, and Tier3's card), never the three individual cards
+  // a user actually sees.
   return (
     <>
       {showTier1 && (
-          <div className="flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
-            <div className="bg-linear-to-br from-amber-800 to-amber-700 px-5 pt-5 pb-9">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-100">Bronze</p>
-              <p className="text-lg font-bold text-white">€{TIER1_PRICE_EUR}</p>
-            </div>
-            <div className="flex flex-1 flex-col p-5 pt-0">
-              <TierBadge icon={Medal} iconColorClass="text-amber-800" starCount={1} />
-              <h3 className="mt-2 text-center text-base font-bold text-slate-900">
-                {blurredCount !== undefined && blurredCount > 0
-                  ? `Unlock all ${blurredCount + 1} matches`
-                  : 'Unlock every match'}
-              </h3>
-              <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-600">
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                  <span>Every matching opportunity, not just one</span>
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                  <span>A real human review of your profile</span>
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                  <span>See how you compare to each program&apos;s real requirements</span>
-                </li>
-              </ul>
-              <div className="mt-auto pt-3">
-                <Link
-                  href="/plans/tier-1"
-                  className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                >
-                  Read more
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
+        <TierCard
+          variant="bronze"
+          price={`€${TIER1_PRICE_EUR}`}
+          bullets={[
+            blurredCount !== undefined && blurredCount > 0
+              ? `Unlock all ${blurredCount + 1} matches`
+              : 'Unlock every match',
+            ...BRONZE_BULLETS_TAIL,
+          ]}
+          href="/plans/tier-1"
+        />
+      )}
 
-        {showTier2 && (
-          <div className="flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
-            <div className="bg-linear-to-br from-slate-600 to-slate-500 px-5 pt-5 pb-9">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-100">Silver</p>
-              <p className="text-lg font-bold text-white">€{getTier2PriceEur(effectiveTier)}</p>
-            </div>
-            <div className="flex flex-1 flex-col p-5 pt-0">
-              <TierBadge icon={Award} iconColorClass="text-slate-600" starCount={2} />
-              <h3 className="mt-2 text-center text-base font-bold text-slate-900">Get application support</h3>
-              <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-600">
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                  <span>A CV and cover letter for every application</span>
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                  <span>One structured interview to help you prepare</span>
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                  <span>Direct messaging with our team</span>
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                  <span>Priority notice on new matches</span>
-                </li>
-              </ul>
-              <div className="mt-auto pt-3">
-                <Link
-                  href="/plans/tier-2"
-                  className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                >
-                  Read more
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
+      {showTier2 && (
+        <TierCard
+          variant="silver"
+          price={`€${getTier2PriceEur(effectiveTier)}`}
+          bullets={SILVER_BULLETS}
+          href="/plans/tier-2"
+        />
+      )}
     </>
   );
 }

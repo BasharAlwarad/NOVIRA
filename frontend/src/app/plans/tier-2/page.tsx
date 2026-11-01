@@ -6,6 +6,7 @@ import { Award, CheckCircle2 } from 'lucide-react';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import { fetchMyAccount } from '@/lib/api/account';
+import { TierBadge } from '@/components/tier-badge';
 import { getTier2PaymentLink, getTier2PriceEur, isTier2PurchaseEnabled } from '@/lib/tier-pricing';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
@@ -74,9 +75,7 @@ export default function Tier2PlanPage() {
           </div>
 
           <div className="space-y-10 px-6 pt-0 pb-10 sm:px-10">
-            <div className="-mt-10 flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-md ring-4 ring-white">
-              <Award className="h-10 w-10 text-slate-600" />
-            </div>
+            <TierBadge icon={Award} variant="silver" size="lg" />
             <section>
               <h2 className="text-lg font-bold text-slate-900">What you get</h2>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">

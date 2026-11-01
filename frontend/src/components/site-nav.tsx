@@ -114,19 +114,27 @@ export function SiteNav() {
             this block and the button group on the right fought for space —
             found live via a real measured 4-9px of horizontal page overflow
             at 390px width, with "Sign in"/"My matches" visibly overlapping
-            the subtitle text. The subtitle now truncates with an ellipsis
-            instead of wrapping unpredictably, and shrink-0 on the button
-            group (below) means it's always this block that gives way, never
-            the buttons. */}
-        <Link href="/" className="group flex min-w-0 items-center gap-3 text-white">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/15 text-lg font-black text-emerald-300 ring-1 ring-emerald-400/30 transition group-hover:bg-emerald-400/25">
+            the subtitle text. shrink-0 on the button group (below) means
+            it's always this block that gives way, never the buttons.
+
+            On mobile specifically, the founder wanted more than truncation
+            — the icon stacks above the wordmark instead of sitting beside
+            it (flex-col, reverting to the original side-by-side flex-row
+            at sm:), both shrink, and the subtitle (the actual space-hog)
+            is dropped entirely rather than just truncated. Desktop (sm:+)
+            is untouched — full-size icon, side-by-side, subtitle shown. */}
+        <Link
+          href="/"
+          className="group flex min-w-0 flex-col items-start gap-1 text-white sm:flex-row sm:items-center sm:gap-3"
+        >
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-xs font-black text-emerald-300 ring-1 ring-emerald-400/30 transition group-hover:bg-emerald-400/25 sm:h-11 sm:w-11 sm:rounded-2xl sm:text-lg">
             N
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold uppercase tracking-[0.28em] text-emerald-200">
+            <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200 sm:text-sm sm:tracking-[0.28em]">
               NOVIRA
             </p>
-            <p className="truncate text-xs text-slate-400">
+            <p className="hidden truncate text-xs text-slate-400 sm:block">
               Study and work guidance in Germany
             </p>
           </div>

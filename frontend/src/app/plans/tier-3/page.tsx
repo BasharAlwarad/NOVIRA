@@ -3,6 +3,7 @@ import { CheckCircle2, Crown } from 'lucide-react';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import { Tier3RequestCard } from '@/components/tier3-request';
+import { TierBadge } from '@/components/tier-badge';
 import { TIER3_UPFRONT_EUR, TIER3_SUCCESS_FEE_EUR } from '@/lib/tier-pricing';
 
 // The Tier 3 destination for the compact card's "Read more" button
@@ -36,9 +37,7 @@ export default function Tier3PlanPage() {
           </div>
 
           <div className="space-y-10 px-6 pt-0 pb-10 sm:px-10">
-            <div className="-mt-10 flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-md ring-4 ring-white">
-              <Crown className="h-10 w-10 text-yellow-600" />
-            </div>
+            <TierBadge icon={Crown} variant="gold" size="lg" />
             <section>
               <h2 className="text-lg font-bold text-slate-900">What you get</h2>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
