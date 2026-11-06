@@ -58,6 +58,22 @@ export function getTier3PaymentLink(upfrontAmountEur: number): string {
   return TIER3_PAYMENT_LINK_FROM_FREE;
 }
 
+// Display-only figure for the compact "Upgrade options" Gold card (found
+// live 2026-11-06: that card always showed a flat "from €500," even for a
+// Tier1/Tier2 user who'd actually owe less under §4.2a's carry-up rule).
+// Mirrors getTier2PriceEur's carry-up logic below, but — unlike that
+// function — not gated on a Payment Link env var being set: Tier 3 is
+// never self-checkout (see getTier3PaymentLink's own comment), so this
+// compact card was never a "click to pay this amount" button, just a
+// preview of what a real conversation/signed agreement would land on. The
+// real charge is still decided server-side at agreement time
+// (Tier3PricingCalculator.cs) — this only keeps the preview honest.
+export function getTier3UpfrontDisplayEur(effectiveTier: EffectiveTier): number {
+  if (effectiveTier === 'Tier2') return TIER3_UPFRONT_EUR - TIER2_PRICE_EUR;
+  if (effectiveTier === 'Tier1') return TIER3_UPFRONT_EUR - TIER1_PRICE_EUR;
+  return TIER3_UPFRONT_EUR;
+}
+
 // The €1,000 success fee (build order step 5) — flat, no carry-up variant
 // (unlike the upfront amount above), so just one static Payment Link.
 // Success-redirect: /account?success_fee_session={CHECKOUT_SESSION_ID} — a

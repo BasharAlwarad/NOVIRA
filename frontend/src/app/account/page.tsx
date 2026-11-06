@@ -250,7 +250,7 @@ const TIER_LABELS: Record<EffectiveTier, string> = {
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
     <CollapsibleSection title="Upgrade options">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
         <TierUpgradeOptions effectiveTier={effectiveTier} />
         <Tier3RequestCard effectiveTier={effectiveTier} compact />
       </div>

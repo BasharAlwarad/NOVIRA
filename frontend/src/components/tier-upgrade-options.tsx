@@ -79,6 +79,7 @@ export function TierUpgradeOptions({
             ...BRONZE_BULLETS_TAIL,
           ]}
           href="/plans/tier-1"
+          fixedWidth
         />
       )}
 
@@ -88,6 +89,7 @@ export function TierUpgradeOptions({
           price={`€${getTier2PriceEur(effectiveTier)}`}
           bullets={SILVER_BULLETS}
           href="/plans/tier-2"
+          fixedWidth
         />
       )}
     </>

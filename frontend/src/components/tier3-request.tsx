@@ -6,8 +6,8 @@ import { fetchMyTier3Case, requestTier3, signTier3Agreement } from '@/lib/api/ti
 import {
   getTier3PaymentLink,
   getTier3SuccessFeePaymentLink,
+  getTier3UpfrontDisplayEur,
   TIER3_SUCCESS_FEE_EUR,
-  TIER3_UPFRONT_EUR,
 } from '@/lib/tier-pricing';
 import { TierCard, GOLD_BULLETS } from '@/components/tier-card';
 import type { Tier3Case, Tier3CaseStatus } from '@/lib/contracts/tier3';
@@ -276,9 +276,10 @@ export function Tier3RequestCard({
     return (
       <TierCard
         variant="gold"
-        price={`from €${TIER3_UPFRONT_EUR}`}
+        price={`from €${getTier3UpfrontDisplayEur(effectiveTier)}`}
         bullets={GOLD_BULLETS}
         href="/plans/tier-3"
+        fixedWidth
       />
     );
   }

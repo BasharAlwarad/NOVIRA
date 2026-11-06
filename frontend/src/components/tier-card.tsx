@@ -82,6 +82,7 @@ export function TierCard({
   bullets,
   href,
   ctaLabel = 'Read more',
+  fixedWidth = false,
 }: {
   variant: TierVariant;
   // Omitted for Free, which has no price line.
@@ -89,11 +90,22 @@ export function TierCard({
   bullets: string[];
   href: string;
   ctaLabel?: string;
+  // Default (false): flex-1/min-w-48, grows to fill its CSS Grid track —
+  // what the homepage's always-4-cards /#services grid wants. true: a
+  // fixed width that doesn't grow — added 2026-11-06 for the /matches and
+  // /account "Upgrade options" row, which can show fewer than 3 cards
+  // (e.g. a Tier1 user only sees Silver+Gold); that row is a flex
+  // container with `justify-center`, which only has something to center
+  // once the cards stop growing to fill 100% of the row.
+  fixedWidth?: boolean;
 }) {
   const config = VARIANT_CONFIG[variant];
+  const sizeClass = fixedWidth ? 'w-full sm:w-52 sm:flex-none' : 'min-w-48 flex-1';
 
   return (
-    <div className="relative flex min-w-48 flex-1 flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg">
+    <div
+      className={`relative flex ${sizeClass} flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition-shadow duration-200 hover:shadow-lg`}
+    >
       <div className={`bg-linear-to-br ${config.gradient} px-5 pt-5 pb-9`}>
         <p className={`text-sm font-semibold ${config.nameTextColor}`}>
           <span className={`uppercase tracking-[0.2em] ${config.labelColor}`}>{config.label}</span>

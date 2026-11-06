@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { getCurrentUser } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
@@ -184,6 +184,30 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   CvRequested: 'CV requested',
   NoCvRequested: 'No CV requested yet',
 };
+
+// "Request a CV" is server-side gated to Tier2+ (CvRequestsEndpoints.cs) —
+// a Free or Tier1 user filtering by "CV requested" will always, correctly,
+// see nothing, since they can never have one. Found live 2026-11-06: that
+// showed the same generic "No matching opportunities yet — check back
+// soon" text as a genuinely-empty result, which reads as a data problem
+// rather than a tier limitation. The filter option itself stays in the
+// dropdown (removing it would just raise "why did this option disappear"
+// instead) — only the empty-state message changes to explain why, with a
+// direct link to upgrade.
+function canRequestCv(effectiveTier: EffectiveTier): boolean {
+  return effectiveTier === 'Tier2' || effectiveTier === 'Tier3';
+}
+
+function cvRequestedEmptyMessage(): ReactNode {
+  return (
+    <>
+      Requesting a CV is a Silver (Tier 2) feature, so there&apos;s nothing to show here yet.{' '}
+      <Link href="/plans/tier-2" className="font-semibold text-emerald-700 underline underline-offset-2">
+        Upgrade to Silver →
+      </Link>
+    </>
+  );
+}
 
 // Filters by the selected status, then — regardless of filter, since it's a
 // harmless no-op once everything shown already shares one status — sorts
@@ -693,7 +717,7 @@ function MatchSection({
   onMatchActivityChanged,
 }: {
   matches: MatchResult[];
-  emptyMessage: string | null;
+  emptyMessage: ReactNode;
   effectiveTier: EffectiveTier;
   cvRequestsByOpportunity: Record<string, CvRequest>;
   onCvRequested: (request: CvRequest) => void;
@@ -1013,7 +1037,7 @@ function MatchesPageContent() {
                   <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
                   <div className="mt-4">
                     <CollapsibleSection title="Upgrade options">
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                         <TierUpgradeOptions
                           effectiveTier={state.effectiveTier}
                           totalMatchCount={state.blurredCount + state.matches.length}
@@ -1079,7 +1103,7 @@ function MatchesPageContent() {
 
               <div className="mb-6">
                 <CollapsibleSection title="Upgrade options">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                     <TierUpgradeOptions effectiveTier={state.effectiveTier} />
                     <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                   </div>
@@ -1119,7 +1143,11 @@ function MatchesPageContent() {
                       cvRequestsByOpportunity,
                       matchActivityByOpportunity
                     )}
-                    emptyMessage="No matching Ausbildung opportunities yet — check back soon as more real opportunities are added."
+                    emptyMessage={
+                      statusFilter === 'CvRequested' && !canRequestCv(state.effectiveTier)
+                        ? cvRequestedEmptyMessage()
+                        : 'No matching Ausbildung opportunities yet — check back soon as more real opportunities are added.'
+                    }
                     effectiveTier={state.effectiveTier}
                     cvRequestsByOpportunity={cvRequestsByOpportunity}
                     onCvRequested={handleCvRequested}
@@ -1135,7 +1163,11 @@ function MatchesPageContent() {
                       cvRequestsByOpportunity,
                       matchActivityByOpportunity
                     )}
-                    emptyMessage="No matching university opportunities yet — check back soon as more real opportunities are added."
+                    emptyMessage={
+                      statusFilter === 'CvRequested' && !canRequestCv(state.effectiveTier)
+                        ? cvRequestedEmptyMessage()
+                        : 'No matching university opportunities yet — check back soon as more real opportunities are added.'
+                    }
                     effectiveTier={state.effectiveTier}
                     cvRequestsByOpportunity={cvRequestsByOpportunity}
                     onCvRequested={handleCvRequested}
