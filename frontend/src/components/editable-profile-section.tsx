@@ -511,9 +511,29 @@ export function EditableProfileSection({ account }: { account: Account }) {
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatus>('NotStarted');
   const [hasPhoto, setHasPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  // One consolidated save action for the whole page (round 2026-11-01,
+  // replacing the earlier "Save profile" button + bottom "Save" button —
+  // the founder's explicit ask: "i dont want to have many buttons saving
+  // changes"). `saveStatus` drives the floating button's color/label;
+  // `initialSnapshot` is the JSON snapshot taken right after load, used to
+  // detect unsaved changes so the button only appears once something's
+  // actually been edited. Plain state rather than a ref — this project's
+  // lint config flags reading a ref's `.current` during render (it bypasses
+  // React's re-render guarantees), and `isDirty` below is computed during
+  // render on every keystroke anyway, so a ref bought nothing here.
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveDetail, setSaveDetail] = useState<string | null>(null);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  // A lightweight nudge, not a tracked staleness system (no attempt to
+  // detect this across reloads) — true as soon as any "Your profile" field
+  // is edited in this session, cleared the moment Summary itself is
+  // touched. Doesn't block saving (the founder's explicit ask) — Summary
+  // is CV content, never read by the matching algorithm (confirmed:
+  // MatchingService.cs never references it), so an out-of-date summary is
+  // a CV-quality concern, not a matching-correctness one.
+  const [profileChangedSinceSummaryTouch, setProfileChangedSinceSummaryTouch] = useState(false);
 
   const reloadPhoto = () => {
     fetchMyIntakePhotoUrl()
@@ -527,15 +547,16 @@ export function EditableProfileSection({ account }: { account: Account }) {
   useEffect(() => {
     fetchMyIntake()
       .then((intake) => {
-        setProfileAnswers(
-          sanitizeAnswers({
-            ...createDefaultAssessmentAnswers(),
-            ...assessmentAnswersFromProfileSnapshot(account),
-          } as AssessmentAnswers)
-        );
+        const sanitizedAnswers = sanitizeAnswers({
+          ...createDefaultAssessmentAnswers(),
+          ...assessmentAnswersFromProfileSnapshot(account),
+        } as AssessmentAnswers);
+        setProfileAnswers(sanitizedAnswers);
+
+        let resolvedForm: SaveIntakeRequest;
         if (intake.profile) {
           const p = intake.profile;
-          setForm({
+          resolvedForm = {
             phoneNumber: p.phoneNumber,
             address: p.address,
             dateOfBirth: p.dateOfBirth,
@@ -546,12 +567,17 @@ export function EditableProfileSection({ account }: { account: Account }) {
             drivingLicence: p.drivingLicence,
             certifications: p.certifications,
             hobbies: p.hobbies,
-          });
+          };
           setIntakeStatus(p.status);
           setHasPhoto(p.hasPhoto);
         } else {
-          setForm(formFromPrefill(intake.prefill));
+          resolvedForm = formFromPrefill(intake.prefill);
         }
+        setForm(resolvedForm);
+        // Snapshot the just-loaded values so the floating save button can
+        // tell "edited" from "untouched" — see its render below.
+        setInitialSnapshot(JSON.stringify({ profileAnswers: sanitizedAnswers, form: resolvedForm }));
+
         setLoadState({ status: 'loaded' });
         reloadPhoto();
       })
@@ -562,34 +588,45 @@ export function EditableProfileSection({ account }: { account: Account }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSave = async () => {
+  // The one save action for the whole page — matching-profile fields and
+  // the CV form together, triggered only from the floating button below.
+  // /matches always computes fresh on every load (MatchingEndpoints.cs's
+  // GET /matches re-runs MatchingService.Match() against the current
+  // profile, no caching), so saving here is already enough to update
+  // matches — no separate "recalculate" step exists to call.
+  const handleSaveAll = async () => {
     if (!form) return;
-    setSaving(true);
-    setMessage(null);
+    setSaveStatus('saving');
+    setSaveDetail(null);
     try {
       await updateMyProfile(buildProfileSnapshot(profileAnswers));
       const saved = await saveMyIntake(form);
       setIntakeStatus(saved.status);
-      setMessage('Saved.');
+      setInitialSnapshot(JSON.stringify({ profileAnswers, form }));
+      setSaveStatus('success');
+      setSaveDetail('Your matches are already up to date.');
+      window.setTimeout(() => {
+        setSaveStatus((current) => (current === 'success' ? 'idle' : current));
+      }, 2500);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to save — try again.');
-    } finally {
-      setSaving(false);
+      setSaveStatus('error');
+      setSaveDetail(err instanceof Error ? err.message : 'Failed to save — try again.');
     }
   };
 
   const handleSubmit = async () => {
     if (!form) return;
     setSubmitting(true);
-    setMessage(null);
+    setSubmitMessage(null);
     try {
       await updateMyProfile(buildProfileSnapshot(profileAnswers));
       await saveMyIntake(form);
       const submitted = await submitMyIntake();
       setIntakeStatus(submitted.status);
-      setMessage("Submitted — we'll be in touch once we've reviewed it.");
+      setInitialSnapshot(JSON.stringify({ profileAnswers, form }));
+      setSubmitMessage("Submitted — we'll be in touch once we've reviewed it.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to submit — try again.');
+      setSubmitMessage(err instanceof Error ? err.message : 'Failed to submit — try again.');
     } finally {
       setSubmitting(false);
     }
@@ -648,8 +685,56 @@ export function EditableProfileSection({ account }: { account: Account }) {
 
   const computedAge = account.verifiedDateOfBirth ? computeAgeFromDob(account.verifiedDateOfBirth) : null;
 
+  // Edited-since-load check (round 2026-11-01) — the floating button below
+  // only renders once this is true, or a save is in flight / just
+  // finished, instead of sitting on screen from the moment the page loads
+  // with nothing to save yet.
+  const currentSnapshot = JSON.stringify({ profileAnswers, form });
+  const isDirty = initialSnapshot !== null && currentSnapshot !== initialSnapshot;
+  const showSaveButton = isDirty || saveStatus !== 'idle';
+
+  const saveButtonClass =
+    saveStatus === 'success'
+      ? 'bg-emerald-500 shadow-emerald-900/30 hover:bg-emerald-600'
+      : saveStatus === 'error'
+        ? 'bg-red-600 shadow-red-900/30 hover:bg-red-700'
+        : 'bg-blue-600 shadow-blue-900/30 hover:bg-blue-700';
+
+  const saveButtonLabel =
+    saveStatus === 'saving'
+      ? 'Saving…'
+      : saveStatus === 'success'
+        ? 'Saved successfully'
+        : saveStatus === 'error'
+          ? 'Failed to save'
+          : 'Save changes';
+
   return (
     <div className="space-y-4">
+      {/* Found live 2026-11-01: the "where do I save" complaint repeated
+          across sections (Your profile, then Contact details) once each
+          only had its own one-off Save button — the founder's explicit
+          ask was one button for every update on the page, not several.
+          This floating button (mirroring SiteNav's FloatingContactButton
+          fixed-position pattern, opposite corner so the two never overlap)
+          is now the only save action anywhere on the page besides the
+          distinct "Save & submit CV for review" action at the bottom —
+          hidden until something's actually been edited, then blue while
+          there's something to save, green on a successful save (fading
+          back to hidden after a couple seconds, since there's nothing left
+          unsaved), red with the real error message if the save fails. */}
+      {showSaveButton && (
+        <button
+          type="button"
+          onClick={handleSaveAll}
+          disabled={saveStatus === 'saving' || submitting}
+          title={saveStatus === 'error' ? (saveDetail ?? undefined) : undefined}
+          className={`fixed bottom-5 left-5 z-40 inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-70 ${saveButtonClass}`}
+        >
+          {saveButtonLabel}
+        </button>
+      )}
+
       <section className="rounded-3xl border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -693,7 +778,10 @@ export function EditableProfileSection({ account }: { account: Account }) {
                 <ProfileField
                   definition={definition}
                   value={profileAnswers[definition.id]}
-                  onChange={(value) => setProfileAnswers({ ...profileAnswers, [definition.id]: value })}
+                  onChange={(value) => {
+                    setProfileAnswers({ ...profileAnswers, [definition.id]: value });
+                    setProfileChangedSinceSummaryTouch(true);
+                  }}
                   verifiedLabel={verifiedLabelFor(definition.id)}
                 />
               </div>
@@ -744,13 +832,33 @@ export function EditableProfileSection({ account }: { account: Account }) {
       />
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Summary</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          A few lines about yourself — optional, we can also draft this for you later.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Summary</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              A few lines about yourself — optional, we can also draft this for you later.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled
+            title="Coming soon"
+            className="shrink-0 cursor-not-allowed rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-400"
+          >
+            AI summary
+          </button>
+        </div>
+        {profileChangedSinceSummaryTouch && (
+          <p className="mt-2 text-xs font-semibold text-red-600">
+            Your profile changed — you may want to update your summary to match.
+          </p>
+        )}
         <textarea
           value={form.summary ?? ''}
-          onChange={(e) => setForm({ ...form, summary: e.target.value || null })}
+          onChange={(e) => {
+            setForm({ ...form, summary: e.target.value || null });
+            setProfileChangedSinceSummaryTouch(false);
+          }}
           rows={3}
           className={`mt-3 ${inputClass}`}
         />
@@ -862,21 +970,13 @@ export function EditableProfileSection({ account }: { account: Account }) {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={handleSave}
-            disabled={saving || submitting}
-            className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          <button
-            type="button"
             onClick={handleSubmit}
-            disabled={saving || submitting}
+            disabled={saveStatus === 'saving' || submitting}
             className="rounded-full bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? 'Submitting…' : 'Save & submit CV for review'}
           </button>
-          {message && <p className="text-xs text-slate-500">{message}</p>}
+          {submitMessage && <p className="text-xs text-slate-500">{submitMessage}</p>}
         </div>
       </section>
     </div>

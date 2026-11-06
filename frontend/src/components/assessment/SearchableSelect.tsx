@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 export interface SearchableSelectOption {
   label: string;
@@ -22,7 +22,28 @@ export function SearchableSelect({
   placeholder = 'Search…',
 }: SearchableSelectProps) {
   const [query, setQuery] = useState('');
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  // Starts on whichever option is actually selected, not always index 0 —
+  // found live 2026-11-01: with a long, grouped list (110 occupation
+  // fields), the real selection can sit well below the fold, and the
+  // first item always carried the gray "highlighted" background regardless
+  // of what was actually selected. That read as "my change didn't save"
+  // even when it had — the real selection (checked, emerald-tinted) was
+  // just scrolled out of view.
+  const [highlightedIndex, setHighlightedIndex] = useState(() => {
+    const index = options.findIndex((option) => option.value === value);
+    return index >= 0 ? index : 0;
+  });
+  const selectedOptionRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    // Scroll the real selection into view on mount, for the same reason —
+    // a highlighted-but-unselected first item at the top of a long list is
+    // not enough; the actual selection needs to be visible without the
+    // user having to already know to scroll past 100+ other options.
+    selectedOptionRef.current?.scrollIntoView({ block: 'nearest' });
+    // Deliberately mount-only — this is about where the list starts, not
+    // something that should re-scroll on every keystroke/selection change.
+  }, []);
 
   const filteredOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -113,6 +134,7 @@ export function SearchableSelect({
                   </p>
                 ) : null}
                 <button
+                  ref={isSelected ? selectedOptionRef : undefined}
                   type="button"
                   role="option"
                   aria-selected={isSelected}

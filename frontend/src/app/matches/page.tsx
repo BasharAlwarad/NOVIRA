@@ -9,7 +9,7 @@ import { getCurrentUser } from '@/lib/api/auth';
 import { fetchMyMatches, NotSignedInError } from '@/lib/api/matches';
 import { listMyCvRequests, requestCv } from '@/lib/api/cv-requests';
 import { listMyMatchActivity, markMatchApplied, unmarkMatchApplied } from '@/lib/api/match-activity';
-import type { MatchResult, StateCount } from '@/lib/contracts/matches';
+import type { MatchResult, PathCount, StateCount } from '@/lib/contracts/matches';
 import type { CvRequest, CvRequestStatus } from '@/lib/contracts/cv-requests';
 import type { MatchActivity } from '@/lib/contracts/match-activity';
 import type { EffectiveTier } from '@/lib/contracts/account';
@@ -36,6 +36,7 @@ type PageState =
       effectiveTier: EffectiveTier;
       hasProfile: boolean;
       stateBreakdown: StateCount[];
+      pathBreakdown: PathCount[];
       cvRequests: CvRequest[];
       matchActivity: MatchActivity[];
     };
@@ -745,6 +746,7 @@ function SectionTabs({ counts }: { counts: Record<MatchTab, number> }) {
           <Link
             key={tab}
             href={href}
+            scroll={false}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
               active ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
@@ -857,6 +859,7 @@ function MatchesPageContent() {
             effectiveTier: matchesResponse.effectiveTier,
             hasProfile: user?.hasProfile ?? false,
             stateBreakdown: matchesResponse.stateBreakdown,
+            pathBreakdown: matchesResponse.pathBreakdown,
             cvRequests: [],
             matchActivity: [],
           });
@@ -984,11 +987,20 @@ function MatchesPageContent() {
             </div>
           )}
 
-          {/* Free tier gets one real match plus a blurred count (never a
-              per-path breakdown, since the backend never sends one — see
-              MatchesResponse's comment) — so the path tabs below, which
-              depend on knowing each match's path, only make sense once
-              everything is unlocked. Deliberately a flat list here instead. */}
+          {/* Free tier (changed 2026-11-01): one real match PER PATH
+              (University + Ausbildung) instead of one overall, plus the
+              same path-count tabs paid tiers already have — backed by real
+              pathBreakdown totals, not real listing detail, so this is
+              safe to show pre-unlock (same "aggregate counts only" rule
+              stateBreakdown already follows). Closes two real gaps found
+              live: (1) a Free user had no way to see the University-vs-
+              Ausbildung split at all, only one combined blurred count; (2)
+              a single overall top match could sit frozen on the same
+              listing across unrelated profile edits whenever that listing
+              happened to outscore everything else — two slots instead of
+              one makes an edit roughly twice as likely to visibly change
+              something, on top of the ranking fix in MatchingService.cs
+              that addresses the frozen-result problem more directly. */}
           {state.status === 'loaded' && state.hasProfile && state.effectiveTier === 'Free' && (
             <>
               {state.matches.length === 0 && state.blurredCount === 0 ? (
@@ -1004,25 +1016,50 @@ function MatchesPageContent() {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <TierUpgradeOptions
                           effectiveTier={state.effectiveTier}
-                          blurredCount={state.blurredCount}
+                          totalMatchCount={state.blurredCount + state.matches.length}
                         />
                         <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                       </div>
                     </CollapsibleSection>
                   </div>
+
+                  <div className="mt-6">
+                    <SectionTabs
+                      counts={{
+                        Ausbildung: state.pathBreakdown.find((p) => p.path === 'Ausbildung')?.count ?? 0,
+                        University: state.pathBreakdown.find((p) => p.path === 'University')?.count ?? 0,
+                        Work: 0,
+                      }}
+                    />
+                  </div>
+
                   <div className="mt-6 space-y-4">
-                    {state.matches.map((match) => (
-                      <MatchCard
-                        key={match.opportunityId}
-                        match={match}
-                        effectiveTier={state.effectiveTier}
-                        cvRequest={cvRequestsByOpportunity[match.opportunityId]}
-                        onCvRequested={handleCvRequested}
-                        matchActivity={matchActivityByOpportunity[match.opportunityId]}
-                        onMatchActivityChanged={handleMatchActivityChanged}
-                      />
-                    ))}
-                    {Array.from({ length: state.blurredCount }).map((_, index) => (
+                    {state.matches
+                      .filter((match) => match.path === activeTab)
+                      .map((match) => (
+                        <MatchCard
+                          key={match.opportunityId}
+                          match={match}
+                          effectiveTier={state.effectiveTier}
+                          cvRequest={cvRequestsByOpportunity[match.opportunityId]}
+                          onCvRequested={handleCvRequested}
+                          matchActivity={matchActivityByOpportunity[match.opportunityId]}
+                          onMatchActivityChanged={handleMatchActivityChanged}
+                        />
+                      ))}
+                    {state.matches.filter((match) => match.path === activeTab).length === 0 &&
+                      (state.pathBreakdown.find((p) => p.path === activeTab)?.count ?? 0) === 0 && (
+                        <p className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                          0 matching opportunities found.
+                        </p>
+                      )}
+                    {Array.from({
+                      length: Math.max(
+                        0,
+                        (state.pathBreakdown.find((p) => p.path === activeTab)?.count ?? 0) -
+                          state.matches.filter((match) => match.path === activeTab).length
+                      ),
+                    }).map((_, index) => (
                       <BlurredMatchCard key={index} variant={index} />
                     ))}
                   </div>

@@ -42,13 +42,23 @@ export interface StateCount {
   count: number;
 }
 
+// Mirrors backend/Endpoints/MatchingEndpoints.cs's PathCount — added
+// 2026-11-01 alongside the Free-tier one-per-path change below, same
+// "aggregate count only, safe pre-unlock" rule as StateCount.
+export interface PathCount {
+  path: OpportunityPath;
+  count: number;
+}
+
 // Mirrors backend/Endpoints/MatchingEndpoints.cs's MatchesResponse — a
-// Free-tier user gets one real match plus blurredCount, never real data for
-// the rest (see that file's comment for why). Tier1+ gets the full list
-// with blurredCount always 0.
+// Free-tier user gets one real match per path (University + Ausbildung,
+// changed 2026-11-01 from a single overall top match — see that file's
+// comment for why) plus blurredCount, never real data for the rest. Tier1+
+// gets the full list with blurredCount always 0.
 export interface MatchesResponse {
   effectiveTier: EffectiveTier;
   matches: MatchResult[];
   blurredCount: number;
   stateBreakdown: StateCount[];
+  pathBreakdown: PathCount[];
 }

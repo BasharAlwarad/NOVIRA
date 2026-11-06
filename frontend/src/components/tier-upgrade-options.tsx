@@ -36,14 +36,18 @@ const TIER_RANK: Record<EffectiveTier, number> = { Free: 0, Tier1: 1, Tier2: 2, 
 // now.
 export function TierUpgradeOptions({
   effectiveTier,
-  blurredCount,
+  totalMatchCount,
 }: {
   effectiveTier: EffectiveTier;
   // /matches-specific: lets Tier1's heading say "Unlock all 35 matches"
   // instead of a generic line, same specificity the old UnlockBanner had.
-  // Omitted (e.g. on /account, where there's no blurred match count) falls
-  // back to generic copy.
-  blurredCount?: number;
+  // The real total (visible + blurred), not blurredCount alone — changed
+  // 2026-11-01 alongside the Free-tier one-per-path change: this used to
+  // add a hardcoded "+1" to blurredCount, assuming exactly one match was
+  // ever already visible, which undercounted once Free tier could show up
+  // to 2 (one per path). Omitted (e.g. on /account, where there's no match
+  // count) falls back to generic copy.
+  totalMatchCount?: number;
 }) {
   const rank = TIER_RANK[effectiveTier];
   const showTier1 = rank < TIER_RANK.Tier1 && isTier1PurchaseEnabled();
@@ -69,8 +73,8 @@ export function TierUpgradeOptions({
           variant="bronze"
           price={`€${TIER1_PRICE_EUR}`}
           bullets={[
-            blurredCount !== undefined && blurredCount > 0
-              ? `Unlock all ${blurredCount + 1} matches`
+            totalMatchCount !== undefined && totalMatchCount > 0
+              ? `Unlock all ${totalMatchCount} matches`
               : 'Unlock every match',
             ...BRONZE_BULLETS_TAIL,
           ]}

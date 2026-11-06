@@ -69,8 +69,29 @@ public static class MatchingService
             results.Add((opportunity, score, factors));
         }
 
+        // Tie-break key (added 2026-11-06) — found live: with so many
+        // synced Ausbildung rows sharing the same score (23 tied at 0, 4
+        // more tied at 1 for one real test profile), the old plain
+        // OrderByDescending(Score) left ties in whatever order the DB
+        // happened to return them in, which never depends on anything
+        // about the user. The result: for any occupation field with no
+        // opportunities actually tagged to it (most of them, today), the
+        // exact same opportunity won every tie, regardless of which field
+        // the user picked — indistinguishable from the app just ignoring
+        // the input entirely. This key is a deterministic hash of the
+        // opportunity's id plus the user's occupation field, so reloading
+        // with the SAME profile always reproduces the SAME order (no
+        // flicker), but changing occupation field reliably reshuffles which
+        // tied opportunity comes out on top — a real, visible response to
+        // the one input most users will actually change while testing.
+        // SHA256, not string.GetHashCode() — .NET randomizes string hash
+        // codes per process by default, which would make this change on
+        // every restart even with nothing else different.
+        var tieBreakSeed = profile.VerifiedOccupationField ?? profile.OccupationField ?? "";
+
         return results
             .OrderByDescending(r => r.Score)
+            .ThenBy(r => TieBreakKey(r.Opportunity.Id, tieBreakSeed))
             .Select(r => new MatchResult(
                 r.Opportunity.Id,
                 r.Opportunity.Title,
@@ -87,6 +108,17 @@ public static class MatchingService
                 r.Opportunity.ApplicationDeadline,
                 r.Opportunity.ReviewedAt))
             .ToList();
+    }
+
+    // See the comment above Match()'s call site — a stable, deterministic
+    // integer derived from (opportunityId, occupationField) so ties break
+    // the same way every time for a given profile, but differently when
+    // the user's occupation field changes.
+    private static int TieBreakKey(Guid opportunityId, string tieBreakSeed)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(opportunityId.ToString() + "|" + tieBreakSeed));
+        return BitConverter.ToInt32(bytes, 0);
     }
 
     // Bundesagentur's search API doesn't reliably populate externeURL —
@@ -157,6 +189,28 @@ public static class MatchingService
     {
         var score = 0;
         var factors = new List<MatchFactor>();
+
+        // Occupation-field match boost (added 2026-11-01) — occupation field
+        // was previously pure hard-filter (in PassesHardFilters above): it
+        // could exclude an opportunity, but passing it had zero effect on
+        // ranking. Found live: an opportunity with no occupation tag at all
+        // passes the filter for every user and can permanently outrank a
+        // real opportunity specifically tagged to whatever field the user
+        // actually picked, because nothing in scoring ever rewarded the tag
+        // actually matching — changing occupation field could look like it
+        // did nothing. A small additive boost (not a large one — a big
+        // swing would just override every other factor below) now rewards
+        // an exact tag match instead, the same "boost, don't just filter"
+        // pattern production recommender systems use for exact-attribute
+        // matches (e.g. Google's media-recommendations boost/bury model).
+        // Same verified-over-self-reported preference as PassesHardFilters.
+        var occupationField = profile.VerifiedOccupationField ?? profile.OccupationField;
+        if (opportunity.OccupationField is not null
+            && string.Equals(opportunity.OccupationField, occupationField, StringComparison.OrdinalIgnoreCase))
+        {
+            score += 2;
+            factors.Add(new MatchFactor("Matches your chosen occupation field", true));
+        }
 
         // Same verified-over-self-reported preference as the education
         // filter above — set only once an admin approves a language

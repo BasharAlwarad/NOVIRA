@@ -8,13 +8,26 @@ namespace Novira.Backend.Endpoints;
 public record MatchPreviewRequest(string Email);
 
 // The blur-then-unlock shape (Monetization-Strategy.md §4.1) — a Free-tier
-// user gets exactly one real match (the highest-scoring, since MatchingService
-// already returns results sorted) plus a bare count of the rest. Deliberately
-// never sends any real data (title/provider/path/factors) for the blurred
-// remainder — a signed-in user calling this endpoint directly (Postman, curl)
-// must not be able to recover real match details this way, same discipline
+// user gets one real match per path (University + Ausbildung — see the
+// Free-tier branch below for why this changed from a single overall top
+// match on 2026-11-01) plus a bare count of the rest. Deliberately never
+// sends any real data (title/provider/factors) for the blurred remainder —
+// a signed-in user calling this endpoint directly (Postman, curl) must not
+// be able to recover real match details this way, same discipline
 // OpportunityCountsEndpoints.cs already follows for the anonymous count.
-public record MatchesResponse(string EffectiveTier, List<MatchResult> Matches, int BlurredCount, List<StateCount> StateBreakdown);
+// Added 2026-11-01, alongside the Free-tier one-per-path change below — an
+// aggregate count only (no listing detail), same "safe to send in full
+// regardless of tier" rule StateCount already follows. Closes a real gap:
+// a Free-tier user previously had no way to see how University vs
+// Ausbildung opportunities split, only one combined blurredCount.
+public record PathCount(string Path, int Count);
+
+public record MatchesResponse(
+    string EffectiveTier,
+    List<MatchResult> Matches,
+    int BlurredCount,
+    List<StateCount> StateBreakdown,
+    List<PathCount> PathBreakdown);
 
 // A per-state count of the user's FULL match list (before any blur
 // truncation) — safe to send in full even to a Free-tier user, since it's
@@ -86,14 +99,38 @@ public static class MatchingEndpoints
                 .OrderByDescending(s => s.Count)
                 .ToList();
 
+            // Computed from the FULL match list, before any blur truncation
+            // — safe to send in full (see PathCount's own comment).
+            var pathBreakdown = matches
+                .GroupBy(m => m.Path)
+                .Select(g => new PathCount(g.Key.ToString(), g.Count()))
+                .OrderByDescending(p => p.Count)
+                .ToList();
+
             if (effectiveTier == EffectiveTier.Free)
             {
-                var visible = matches.Take(1).ToList();
+                // One real visible match per path (University + Ausbildung),
+                // not one overall — changed 2026-11-01. `matches` is already
+                // sorted by score descending, so the first occurrence of
+                // each path in iteration order is that path's own top
+                // scorer; GroupBy preserves source order both across groups
+                // and within each group. Previously a single global
+                // `Take(1)` meant a path with no real opportunities tagged
+                // to the user's occupation field could sit frozen behind
+                // whichever other path's top pick happened to score higher
+                // overall — changing occupation field could look like it
+                // had no effect at all (founder-reported live 2026-11-01).
+                // Two visible slots instead of one also means an edit is
+                // now about twice as likely to visibly change something.
+                var visible = matches
+                    .GroupBy(m => m.Path)
+                    .Select(g => g.First())
+                    .ToList();
                 var blurredCount = matches.Count - visible.Count;
-                return Results.Ok(new MatchesResponse(effectiveTier.ToString(), visible, blurredCount, stateBreakdown));
+                return Results.Ok(new MatchesResponse(effectiveTier.ToString(), visible, blurredCount, stateBreakdown, pathBreakdown));
             }
 
-            return Results.Ok(new MatchesResponse(effectiveTier.ToString(), matches, 0, stateBreakdown));
+            return Results.Ok(new MatchesResponse(effectiveTier.ToString(), matches, 0, stateBreakdown, pathBreakdown));
         });
     }
 }
