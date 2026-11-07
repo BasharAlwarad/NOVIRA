@@ -34,13 +34,22 @@ export function SearchableSelect({
     return index >= 0 ? index : 0;
   });
   const selectedOptionRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
-    // Scroll the real selection into view on mount, for the same reason —
-    // a highlighted-but-unselected first item at the top of a long list is
-    // not enough; the actual selection needs to be visible without the
-    // user having to already know to scroll past 100+ other options.
-    selectedOptionRef.current?.scrollIntoView({ block: 'nearest' });
+    // Scroll the real selection into view within the dropdown's own list —
+    // for the same reason as above, a highlighted-but-unselected first item
+    // isn't enough when the real selection is well below the fold. Setting
+    // scrollTop directly on the list, not element.scrollIntoView(), which
+    // was the actual bug found live 2026-11-07: scrollIntoView walks up
+    // *every* scrollable ancestor, not just the nearest one, so it was also
+    // scrolling the whole page down to this field the instant /account (or
+    // the assessment wizard) mounted — nothing to do with this list at all.
+    const list = listRef.current;
+    const option = selectedOptionRef.current;
+    if (list && option) {
+      list.scrollTop = option.offsetTop - list.clientHeight / 2 + option.clientHeight / 2;
+    }
     // Deliberately mount-only — this is about where the list starts, not
     // something that should re-scroll on every keystroke/selection change.
   }, []);
@@ -110,6 +119,7 @@ export function SearchableSelect({
       </div>
 
       <ul
+        ref={listRef}
         id="occupation-field-listbox"
         role="listbox"
         className="max-h-64 space-y-1 overflow-y-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm shadow-slate-200/50"

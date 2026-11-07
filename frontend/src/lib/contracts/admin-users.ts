@@ -115,6 +115,19 @@ export interface AdminAppliedMatch {
   appliedAt: string;
 }
 
+// Mirrors backend/Endpoints/InboxAdminEndpoints.cs's InboxEntry — one row
+// per user whose most recent message is from them, not the team.
+export interface InboxEntry {
+  userId: string;
+  email: string;
+  fullName: string | null;
+  verifiedFullName: string | null;
+  effectiveTier: EffectiveTier;
+  latestMessageId: string;
+  latestMessageBody: string;
+  latestMessageCreatedAt: string;
+}
+
 export interface ReviewDocumentRequest {
   status: Extract<DocumentReviewStatus, 'Approved' | 'Denied' | 'FlaggedRed'>;
   note: string | null;

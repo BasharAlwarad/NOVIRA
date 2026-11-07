@@ -167,6 +167,7 @@ app.MapOpportunityCountsEndpoints();
 app.MapAuthEndpoints();
 app.MapDocumentsEndpoints();
 app.MapDocumentsAdminEndpoints();
+app.MapInboxAdminEndpoints();
 app.MapAccountEndpoints();
 app.MapMessagesEndpoints();
 app.MapPurchasesEndpoints();

@@ -6,16 +6,14 @@ import Link from 'next/link';
 import {
   AdminUnauthorizedError,
   deleteUser,
-  fetchMessageAttachmentUrl,
   getUserDetail,
   recomputeVerifiedData,
   reviewDocument,
   sendMessageToUser,
 } from '@/lib/api/admin-users';
 import type { AdminAppliedMatch, AdminDocument, AdminPurchase, AdminUserDetail, ReviewDocumentRequest } from '@/lib/contracts/admin-users';
-import type { Message } from '@/lib/contracts/messages';
 import type { IntakeProfile, IntakeStatus } from '@/lib/contracts/intake';
-import { openInNewTabAfterFetch } from '@/lib/open-in-new-tab';
+import { CompactMessageThread } from '@/components/admin/admin-message-thread';
 import { useAdminKey } from '@/hooks/useAdminKey';
 import { useAdminLiveMessages } from '@/hooks/useAdminLiveMessages';
 import { useAdminReplyNotifications } from '@/hooks/useAdminReplyNotifications';
@@ -250,175 +248,6 @@ function DocumentCard({
         </div>
       )}
     </div>
-  );
-}
-
-// The admin's own view of what's been sent to this user — previously
-// invisible on this page entirely: sending a message had no track record
-// here, only the user could see it (on /account). Includes every message
-// regardless of origin, since free-text sends and the automatic Deny/
-// FlagRed notices both land in the same Messages table. User-authored
-// replies (Sender: 'User', Tier2+ only — see Message.cs's comment) are
-// visually distinct and skip the Read/Unread badge, since ReadAt only ever
-// tracks the USER's read state (POST /messages/read-all) — meaningless for
-// a message the user wrote themselves. Not yet live-pushed to this page
-// (see MessagesHub.cs's comment); a reply appears on the next manual
-// refresh.
-function MessageHistorySection({
-  messages,
-  adminKey,
-  userId,
-}: {
-  messages: Message[];
-  adminKey: string;
-  userId: string;
-}) {
-  return (
-    <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold text-slate-900">Message history</h2>
-      <p className="mt-1 text-xs text-slate-500">
-        Everything exchanged with this user, including automatic notices from document decisions.
-      </p>
-
-      <div className="mt-3 space-y-3">
-        {messages.length === 0 ? (
-          <p className="text-sm text-slate-500">No messages sent yet.</p>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`rounded-2xl p-4 ${
-                message.sender === 'User'
-                  ? 'border border-emerald-200 bg-emerald-50/60'
-                  : 'border border-slate-200 bg-slate-50'
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-950">
-                  {message.sender === 'User' ? 'From user' : message.subject}
-                </p>
-                <div className="flex items-center gap-2">
-                  {message.sender === 'Admin' && (
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                        message.readAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                      }`}
-                    >
-                      {message.readAt ? 'Read' : 'Unread'}
-                    </span>
-                  )}
-                  <p className="text-xs text-slate-400">{formatDateTime(message.createdAt)}</p>
-                </div>
-              </div>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{message.body}</p>
-              {message.hasAttachment && (
-                <AdminAttachmentDownloadButton
-                  adminKey={adminKey}
-                  userId={userId}
-                  messageId={message.id}
-                  fileName={message.attachmentFileName}
-                />
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
-// Lets the founder re-download exactly what was sent to a user, e.g. to
-// double-check a CV delivery. Can't be a plain <a href> — the admin-key
-// header has no equivalent on a navigation — so this opens a blank tab
-// synchronously on click, then redirects it once the SAS URL resolves (see
-// openInNewTabAfterFetch's comment for why: a bare window.open() after the
-// await gets silently popup-blocked in real browsers).
-function AdminAttachmentDownloadButton({
-  adminKey,
-  userId,
-  messageId,
-  fileName,
-}: {
-  adminKey: string;
-  userId: string;
-  messageId: string;
-  fileName: string | null;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleDownload = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await openInNewTabAfterFetch(() => fetchMessageAttachmentUrl(adminKey, userId, messageId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to download.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="mt-3 flex items-center gap-2 border-t border-slate-200/70 pt-3">
-      <button
-        type="button"
-        onClick={handleDownload}
-        disabled={loading}
-        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {loading ? 'Opening…' : `⬇ Download${fileName ? ` ${fileName}` : ''}`}
-      </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-    </div>
-  );
-}
-
-// Subject dropped 2026-09-30 — real friction on a quick chat-style reply
-// to a Tier2+ conversation, where the user's own reply box never has one
-// either (see backend/Endpoints/DocumentsAdminEndpoints.cs's comment).
-function MessageForm({ onSend }: { onSend: (body: string) => Promise<void> }) {
-  const [body, setBody] = useState('');
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSending(true);
-    setResult(null);
-    try {
-      await onSend(body);
-      setBody('');
-      setResult("Message sent — visible in the user's account.");
-    } catch {
-      setResult('Failed to send — try again.');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold text-slate-900">Send a message</h2>
-      <textarea
-        required
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Message"
-        rows={4}
-        className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
-      />
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={sending}
-          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {sending ? 'Sending…' : 'Send'}
-        </button>
-        {result && <p className="text-xs text-slate-500">{result}</p>}
-      </div>
-    </form>
   );
 }
 
@@ -896,19 +725,17 @@ function UserDetailTabs({
   onChange,
   documentCount,
   pendingDocumentCount,
-  messageCount,
 }: {
   tab: DetailTab;
   onChange: (tab: DetailTab) => void;
   documentCount: number;
   pendingDocumentCount: number;
-  messageCount: number;
 }) {
   const tabs: { key: DetailTab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'documents', label: `Documents (${documentCount})` },
     { key: 'cv', label: 'CV & applications' },
-    { key: 'messages', label: `Messages (${messageCount})` },
+    { key: 'messages', label: 'Messages' },
     { key: 'danger', label: 'Danger zone' },
   ];
 
@@ -1104,7 +931,6 @@ export default function AdminUserProfilePage() {
             onChange={setTab}
             documentCount={user.documents.length}
             pendingDocumentCount={user.documents.filter((d) => d.reviewStatus === 'PendingReview').length}
-            messageCount={user.messages.length}
           />
         </div>
 
@@ -1229,12 +1055,14 @@ export default function AdminUserProfilePage() {
         )}
 
         {tab === 'messages' && (
-          <>
-            <MessageHistorySection messages={user.messages} adminKey={adminKey} userId={userId} />
-            <section className="mt-6">
-              <MessageForm onSend={handleSendMessage} />
-            </section>
-          </>
+          <div className="mt-6">
+            <CompactMessageThread
+              messages={user.messages}
+              adminKey={adminKey}
+              userId={userId}
+              onSend={handleSendMessage}
+            />
+          </div>
         )}
 
         {tab === 'danger' && <DeleteUserSection onDelete={handleDeleteUser} />}

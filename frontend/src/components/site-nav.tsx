@@ -1,31 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
-import { getCurrentUser } from '@/lib/api/auth';
+import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getCurrentUser, logout } from '@/lib/api/auth';
 import { listMyMessages, markAllMessagesRead } from '@/lib/api/messages';
 import type { EffectiveTier } from '@/lib/contracts/account';
 import { usePolling } from '@/hooks/usePolling';
 import { useLiveMessages } from '@/hooks/useLiveMessages';
 import { MessagesPanel } from '@/components/messages-panel';
+import { TierBadge } from '@/components/tier-badge';
+import { EFFECTIVE_TIER_ICON_CONFIG } from '@/components/current-tier-badge';
 
 const navLinks = [
   { label: 'Services', href: '/#services' },
   { label: 'Contact', href: '/#contact' },
 ];
-
-// Short labels for the persistent tier badge (point 2 of the 2026-10-04
-// UI/UX hardening pass) — distinct from account/page.tsx's own TIER_LABELS,
-// which spells out what each tier includes; this one needs to fit in a
-// small pill, so the "what does this mean" job is left to wherever the
-// badge links (the rewritten #services section).
-const TIER_BADGE_LABELS: Record<EffectiveTier, string> = {
-  Free: 'Free',
-  Tier1: 'Tier 1',
-  Tier2: 'Tier 2',
-  Tier3: 'Tier 3',
-};
 
 // Slower than the account page's own poll (SiteNav renders on every page,
 // so this fires far more often across a session) — the badge just needs to
@@ -40,9 +30,13 @@ const UNREAD_POLL_INTERVAL_MS = 45_000;
 // no flash of the wrong state is worth engineering around yet at this scale.
 export function SiteNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [hasUnread, setHasUnread] = useState(false);
   const [effectiveTier, setEffectiveTier] = useState<EffectiveTier | null>(null);
+  // For the account dropdown's header row (2026-11-07) — same "name, email,
+  // plan" header SaaSFrame's profile-menu research described.
+  const [email, setEmail] = useState<string | null>(null);
   // Gates the "Assessment" nav link (point 4) — doesn't make sense to keep
   // inviting someone to retake the assessment once they already have a
   // profile from it.
@@ -68,6 +62,7 @@ export function SiteNav() {
         setSignedIn(user !== null);
         setEffectiveTier(user?.effectiveTier ?? null);
         setHasProfile(user?.hasProfile ?? false);
+        setEmail(user?.email ?? null);
 
         if (user !== null) {
           refreshUnreadCount();
@@ -104,6 +99,14 @@ export function SiteNav() {
       setHasUnread(true);
     }
   });
+
+  // Moved here from account/page.tsx's own AccountMenu (2026-11-07) — sign
+  // out is now reachable from the nav's account dropdown on every page, not
+  // just from within /account itself.
+  const handleLogout = async () => {
+    await logout();
+    router.push('/');
+  };
 
   return (
     <>
@@ -161,7 +164,7 @@ export function SiteNav() {
               {link.label}
             </Link>
           ))}
-          {signedIn && (
+          {signedIn && effectiveTier && (
             <>
               <Link
                 href="/matches"
@@ -169,27 +172,13 @@ export function SiteNav() {
               >
                 My matches
               </Link>
-              <Link
-                href="/account"
-                className="flex items-center gap-1.5 text-sm font-medium text-slate-300 transition hover:text-white"
-              >
-                My account
-                {hasUnread && (
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" aria-label="New message" />
-                )}
-              </Link>
-              {/* The persistent tier badge (point 2) — links through to
-                  the rewritten #services section, which doubles as the
-                  "what do I get at each level" explainer rather than
-                  building a second one. */}
-              {effectiveTier && (
-                <Link
-                  href="/#services"
-                  className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/30 transition hover:bg-emerald-400/25"
-                >
-                  {TIER_BADGE_LABELS[effectiveTier]}
-                </Link>
-              )}
+              <AccountNavMenu
+                effectiveTier={effectiveTier}
+                email={email}
+                hasUnread={hasUnread}
+                onLogout={handleLogout}
+                variant="desktop"
+              />
             </>
           )}
           {signedIn === false && (
@@ -219,15 +208,22 @@ export function SiteNav() {
               My matches
             </Link>
           )}
-          <Link
-            href={signedIn ? '/account' : '/assessment'}
-            className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
-          >
-            {signedIn ? 'My account' : 'Start questionnaire'}
-            {signedIn && hasUnread && (
-              <span className="ml-1.5 h-2 w-2 rounded-full bg-slate-950/60" aria-label="New message" />
-            )}
-          </Link>
+          {signedIn && effectiveTier ? (
+            <AccountNavMenu
+              effectiveTier={effectiveTier}
+              email={email}
+              hasUnread={hasUnread}
+              onLogout={handleLogout}
+              variant="mobile"
+            />
+          ) : (
+            <Link
+              href="/assessment"
+              className="btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+            >
+              Start questionnaire
+            </Link>
+          )}
         </div>
       </div>
     </header>
@@ -243,6 +239,120 @@ export function SiteNav() {
         />
       )}
     </>
+  );
+}
+
+// The nav's single account control (2026-11-07) — replaces what used to be
+// two separate things: a plain "My account" link here, plus a standalone
+// "Account settings" dropdown (Sign out / Delete account) that only
+// appeared once you were already on /account. Research (SaaSFrame's
+// profile-menu pattern, OneSignal's unified account dropdown) consistently
+// puts plan status, account info, and settings/sign-out together in one
+// menu anchored on the account control, not spread across two places —
+// also closes a real complaint found live: the tier medallion showing both
+// here AND again on /account's own page header read as the same cue shown
+// twice. The medallion now lives only here; /account's page header lost
+// its own copy of it entirely.
+function AccountNavMenu({
+  effectiveTier,
+  email,
+  hasUnread,
+  onLogout,
+  variant,
+}: {
+  effectiveTier: EffectiveTier;
+  email: string | null;
+  hasUnread: boolean;
+  onLogout: () => void;
+  // 'desktop': plain text link styling, inline in the nav row. 'mobile':
+  // the existing solid-emerald pill button styling — same visual treatment
+  // each already had as a plain link, just now a dropdown trigger instead.
+  variant: 'desktop' | 'mobile';
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const config = EFFECTIVE_TIER_ICON_CONFIG[effectiveTier];
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={
+          variant === 'desktop'
+            ? 'flex items-center gap-1.5 text-sm font-medium text-slate-300 transition hover:text-white'
+            : 'btn btn-sm rounded-full border-0 bg-emerald-400 text-slate-950 hover:bg-emerald-300'
+        }
+      >
+        <TierBadge icon={config.icon} variant={config.variant} size="xs" />
+        My account
+        {hasUnread && (
+          <span
+            className={`h-2 w-2 rounded-full ${variant === 'desktop' ? 'bg-emerald-400' : 'bg-slate-950/60'}`}
+            aria-label="New message"
+          />
+        )}
+        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 opacity-70" aria-hidden="true">
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-10 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_16px_48px_rgba(15,23,42,0.12)]"
+        >
+          <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+            <TierBadge icon={config.icon} variant={config.variant} size="xs" />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-slate-900">{config.label}</p>
+              {email && <p className="truncate text-[11px] text-slate-500">{email}</p>}
+            </div>
+          </div>
+          <Link
+            href="/account"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            My account
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={onLogout}
+            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Sign out
+          </button>
+          <Link
+            href="/account/delete"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+          >
+            Delete account
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import { useAdminLiveMessages } from '@/hooks/useAdminLiveMessages';
 const ADMIN_KEY_STORAGE_KEY = 'novira.admin.key';
 
 const NAV_ITEMS = [
+  { label: 'Inbox', href: '/admin/inbox' },
   { label: 'Opportunities', href: '/admin/opportunities' },
   { label: 'Users', href: '/admin/users/profiles' },
   { label: 'CV requests', href: '/admin/cv-requests' },
@@ -123,11 +124,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition ${
                         active ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'
                       }`}
                     >
                       {item.label}
+                      {/* A lightweight ambient cue, not a replacement for the
+                          Users list's own per-user flag (found live
+                          2026-11-07: a reply only ever became visible once
+                          an admin thought to go check Users specifically).
+                          Presence only, no count — same dot-not-count
+                          convention the public-facing SiteNav already uses
+                          for this exact signal. Lives on Inbox now, not
+                          Users (added the same day, right after this dot) —
+                          Inbox is the actually-relevant destination for
+                          "something needs a reply." A badge like this
+                          existed once before and was removed in favor of
+                          the per-user flag alone (2026-09-30) because a
+                          bare aggregate badge didn't say which user; this
+                          isn't that — the per-user flag on the Users list
+                          is unchanged, this is purely "something needs a
+                          look," visible from any admin page. */}
+                      {item.href === '/admin/inbox' && unreadReplyUserIds.size > 0 && (
+                        <span
+                          className="h-2 w-2 rounded-full bg-emerald-500"
+                          aria-label="New message from a user"
+                        />
+                      )}
                     </Link>
                   );
                 })}

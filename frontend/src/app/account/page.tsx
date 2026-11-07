@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cancelAccountDeletion, fetchMyAccount, NotSignedInError as NoAccountSession } from '@/lib/api/account';
-import { logout } from '@/lib/api/auth';
 import { listMyDocuments, uploadDocument } from '@/lib/api/documents';
 import { listMyMessages } from '@/lib/api/messages';
 import { verifyCheckoutSession } from '@/lib/api/purchases';
@@ -15,7 +14,6 @@ import type { PurchaseTier } from '@/lib/contracts/purchases';
 import { TierUpgradeOptions } from '@/components/tier-upgrade-options';
 import { Tier3RequestCard } from '@/components/tier3-request';
 import { CollapsibleSection } from '@/components/collapsible-section';
-import { CurrentTierBadge } from '@/components/current-tier-badge';
 import { EditableProfileSection } from '@/components/editable-profile-section';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
@@ -243,10 +241,10 @@ const TIER_LABELS: Record<EffectiveTier, string> = {
 // Round 6: the upgrade cards below switch to `compact` — the exact same
 // gradient/medallion/star card component /matches uses, replacing the old
 // plain stacked green boxes this section used to render. The "what plan am
-// I on" status itself moved out of this section entirely (2026-11-01) —
-// see CurrentTierBadge, now a small pill under the page header's "Account
-// settings" dropdown instead of a full-width banner here — so this section
-// is just the CollapsibleSection now, same as /matches (round 21).
+// I on" status itself moved out of this section entirely (2026-11-01), then
+// out of this page entirely (2026-11-07 — it now lives only in the nav's
+// own account menu, SiteNav's AccountNavMenu) — so this section is just the
+// CollapsibleSection now, same as /matches (round 21).
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
     <CollapsibleSection title="Upgrade options">
@@ -255,69 +253,6 @@ function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
         <Tier3RequestCard effectiveTier={effectiveTier} compact />
       </div>
     </CollapsibleSection>
-  );
-}
-
-// Replaces the old always-visible "Delete account" red box (point 10 of the
-// 2026-10-04 UI/UX hardening pass) — the founder explicitly didn't want
-// deletion to be this obvious/easy to stumble into. Tucked into a dropdown
-// alongside Sign out instead, with "Delete account" styled distinctly
-// within that menu, not as its own loud section. The actual deletion flow
-// (reason, email confirmation, 7-day cooling-off) lives at /account/delete.
-function AccountMenu({ onLogout }: { onLogout: () => void }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
-
-  return (
-    <div ref={menuRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="mt-1 flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600"
-      >
-        Account settings
-        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
-          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-        </svg>
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-10 mt-2 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_16px_48px_rgba(15,23,42,0.12)]"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={onLogout}
-            className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Sign out
-          </button>
-          <Link
-            href="/account/delete"
-            role="menuitem"
-            onClick={() => setOpen(false)}
-            className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-          >
-            Delete account
-          </Link>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -527,30 +462,21 @@ export default function AccountPage() {
       });
   }, [router]);
 
-  const handleLogout = async () => {
-    await logout();
-    router.push('/');
-  };
-
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <SiteNav />
       <section className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
-              Your account
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
-              Profile, documents &amp; messages
-            </h1>
-          </div>
-          {state.status === 'loaded' && (
-            <div className="flex flex-col items-end gap-2">
-              <AccountMenu onLogout={handleLogout} />
-              <CurrentTierBadge effectiveTier={state.account.effectiveTier} />
-            </div>
-          )}
+        {/* The tier medallion and the "Account settings" dropdown (Sign
+            out/Delete account) both moved into the nav's own account menu
+            (2026-11-07, see SiteNav's AccountNavMenu) — this header is just
+            the page title now, not a second place for either. */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
+            Your account
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
+            Profile, documents &amp; messages
+          </h1>
         </div>
 
         {state.status === 'loaded' && (

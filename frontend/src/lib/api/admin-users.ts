@@ -1,6 +1,7 @@
 import type {
   AdminUserDetail,
   AdminUserListItem,
+  InboxEntry,
   ReviewDocumentRequest,
   SendMessageRequest,
 } from '@/lib/contracts/admin-users';
@@ -38,6 +39,16 @@ export async function listUsers(adminKey: string, search?: string): Promise<Admi
   }
 
   return (await response.json()) as AdminUserListItem[];
+}
+
+export async function listInbox(adminKey: string): Promise<InboxEntry[]> {
+  const response = await adminFetch('/api/admin/inbox', adminKey);
+
+  if (!response.ok) {
+    throw new Error('Failed to load the inbox.');
+  }
+
+  return (await response.json()) as InboxEntry[];
 }
 
 export async function getUserDetail(adminKey: string, userId: string): Promise<AdminUserDetail> {
