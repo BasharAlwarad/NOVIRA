@@ -21,7 +21,15 @@ public record AdminCvRequestResponse(
     DateTime? UpdatedAt,
     bool HasDraft,
     int RevisionCount,
-    bool IsReferenceExample);
+    bool IsReferenceExample,
+    // True when the user's self-reported profile (User.ProfileUpdatedAt)
+    // was touched more recently than this request's own content (its last
+    // AI generation, or its submission if never generated) — added
+    // 2026-11-08 so generating/sending a CV against a profile that's since
+    // changed underneath it isn't silent. Never true once Delivered —
+    // a delivered CV is a point-in-time deliverable, not something that
+    // retroactively needs re-review.
+    bool ProfileChangedSinceRequest);
 
 public record UpdateCvRequestStatusRequest(CvRequestStatus Status);
 
@@ -61,11 +69,15 @@ public static class CvRequestsAdminEndpoints
         {
             var requests = await db.CvRequests.OrderByDescending(r => r.CreatedAt).ToListAsync();
             var userIds = requests.Select(r => r.UserId).Distinct().ToList();
-            var emails = await db.Users
+            var users = await db.Users
                 .Where(u => userIds.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id, u => u.Email);
+                .ToDictionaryAsync(u => u.Id, u => new { u.Email, u.ProfileUpdatedAt });
 
-            return Results.Ok(requests.Select(r => ToResponse(r, emails.GetValueOrDefault(r.UserId, "(deleted user)"))));
+            return Results.Ok(requests.Select(r =>
+            {
+                var user = users.GetValueOrDefault(r.UserId);
+                return ToResponse(r, user?.Email ?? "(deleted user)", user?.ProfileUpdatedAt);
+            }));
         });
 
         group.MapPatch("/{id:guid}", async (Guid id, UpdateCvRequestStatusRequest request, AppDbContext db) =>
@@ -81,7 +93,7 @@ public static class CvRequestsAdminEndpoints
             await db.SaveChangesAsync();
 
             var user = await db.Users.FindAsync(cvRequest.UserId);
-            return Results.Ok(ToResponse(cvRequest, user?.Email ?? "(deleted user)"));
+            return Results.Ok(ToResponse(cvRequest, user?.Email ?? "(deleted user)", user?.ProfileUpdatedAt));
         });
 
         group.MapGet("/{id:guid}/draft", async (Guid id, AppDbContext db) =>
@@ -181,7 +193,7 @@ public static class CvRequestsAdminEndpoints
             await db.SaveChangesAsync();
 
             var user = await db.Users.FindAsync(cvRequest.UserId);
-            return Results.Ok(ToResponse(cvRequest, user?.Email ?? "(deleted user)"));
+            return Results.Ok(ToResponse(cvRequest, user?.Email ?? "(deleted user)", user?.ProfileUpdatedAt));
         });
 
         group.MapPost("/{id:guid}/generate", async (Guid id, AppDbContext db, CvGenerationService generation) =>
@@ -277,7 +289,7 @@ public static class CvRequestsAdminEndpoints
             await db.SaveChangesAsync();
 
             var user = await db.Users.FindAsync(cvRequest.UserId);
-            return Results.Ok(ToResponse(cvRequest, user?.Email ?? "(deleted user)"));
+            return Results.Ok(ToResponse(cvRequest, user?.Email ?? "(deleted user)", user?.ProfileUpdatedAt));
         });
     }
 
@@ -417,10 +429,17 @@ public static class CvRequestsAdminEndpoints
         return CvPdfRenderer.RenderCoverLetter(coverLetter);
     }
 
-    private static AdminCvRequestResponse ToResponse(CvRequest r, string userEmail) => new(
-        r.Id, r.UserId, userEmail, r.OpportunityId, r.OpportunityTitle, r.OpportunityProvider,
-        r.Status, r.CreatedAt, r.UpdatedAt,
-        !string.IsNullOrWhiteSpace(r.CvContentJson), r.RevisionCount, r.IsReferenceExample);
+    private static AdminCvRequestResponse ToResponse(CvRequest r, string userEmail, DateTime? profileUpdatedAt = null)
+    {
+        var profileChanged = r.Status != CvRequestStatus.Delivered
+            && profileUpdatedAt is { } updatedAt
+            && updatedAt > (r.LastGeneratedAt ?? r.CreatedAt);
+        return new(
+            r.Id, r.UserId, userEmail, r.OpportunityId, r.OpportunityTitle, r.OpportunityProvider,
+            r.Status, r.CreatedAt, r.UpdatedAt,
+            !string.IsNullOrWhiteSpace(r.CvContentJson), r.RevisionCount, r.IsReferenceExample,
+            profileChanged);
+    }
 
     private static CvDraftResponse ToDraftResponse(
         CvRequest r, long inputTokens, long outputTokens, decimal estimatedCostUsd, string? error) => new(

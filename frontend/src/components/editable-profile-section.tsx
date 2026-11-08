@@ -87,12 +87,12 @@ function ProfileField({
   definition,
   value,
   onChange,
-  verifiedLabel,
+  verifiedInfo,
 }: {
   definition: AssessmentQuestionDefinition<AssessmentQuestionId>;
   value: AssessmentAnswerValue;
   onChange: (value: AssessmentAnswerValue) => void;
-  verifiedLabel?: string | null;
+  verifiedInfo?: VerifiedFieldInfo | null;
 }) {
   return (
     <div>
@@ -156,13 +156,35 @@ function ProfileField({
           ))}
         </select>
       )}
-      {verifiedLabel && (
+      {verifiedInfo && !verifiedInfo.diverges && (
         <p className="mt-1 text-[11px] font-semibold text-emerald-700">
-          ✓ Confirmed as {verifiedLabel} from a document
+          ✓ Confirmed as {verifiedInfo.label} from a document
+        </p>
+      )}
+      {verifiedInfo && verifiedInfo.diverges && (
+        <p className="mt-1 text-xs font-semibold text-amber-700">
+          {verifiedInfo.affectsMatching
+            ? `An approved document confirmed "${verifiedInfo.label}" — matching still uses that, not what you just entered here. If this is a deliberate change, let us know via Messages so we can take a look.`
+            : `An approved document confirmed "${verifiedInfo.label}" — this doesn't affect matching, just shown for reference.`}
         </p>
       )}
     </div>
   );
+}
+
+// Added 2026-11-08 alongside the divergence check below — a verified field
+// used to only ever show a quiet green confirmation, even when the current
+// self-report answer had since drifted away from it. That was silently
+// misleading for the 4 fields MatchingService.cs actually prefers the
+// verified value for (occupationField/highestEducation/germanLevel/
+// englishLevel): the edit looked like it took effect, but real /matches
+// results kept using the old verified value with no explanation anywhere.
+// passportStatus is verifiable too but isn't read by matching at all, so
+// its divergence note is informational only (affectsMatching: false).
+interface VerifiedFieldInfo {
+  label: string;
+  diverges: boolean;
+  affectsMatching: boolean;
 }
 
 // Backend enums arrive as PascalCase member names (JsonStringEnumConverter)
@@ -526,14 +548,22 @@ export function EditableProfileSection({ account }: { account: Account }) {
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
-  // A lightweight nudge, not a tracked staleness system (no attempt to
-  // detect this across reloads) — true as soon as any "Your profile" field
-  // is edited in this session, cleared the moment Summary itself is
-  // touched. Doesn't block saving (the founder's explicit ask) — Summary
-  // is CV content, never read by the matching algorithm (confirmed:
-  // MatchingService.cs never references it), so an out-of-date summary is
-  // a CV-quality concern, not a matching-correctness one.
-  const [profileChangedSinceSummaryTouch, setProfileChangedSinceSummaryTouch] = useState(false);
+  // Generalized 2026-11-08 from a Summary-only, session-only nudge into
+  // one shared banner covering the whole CV-content block (Summary,
+  // Experience, Skills, Certifications) — a changed occupation/path can
+  // make any of those read oddly, not just the summary paragraph, and
+  // flagging them one at a time risked looking fixed on reload when it
+  // wasn't. Now backed by the two persisted timestamps that already exist
+  // (User.ProfileUpdatedAt vs IntakeProfile.UpdatedAt) so a real reload
+  // doesn't silently clear a genuine staleness — initialized from those on
+  // load, set true the moment any "Your profile" field is edited in this
+  // session, and cleared only by the one shared Save action below (which
+  // re-saves the CV content too, the same moment IntakeProfile.UpdatedAt
+  // itself would catch up). Still doesn't block saving — Summary/
+  // Experience/Skills are CV content, never read by the matching algorithm
+  // (confirmed: MatchingService.cs never references any of them), so this
+  // is a CV-quality nudge, not a matching-correctness gate.
+  const [cvContentStale, setCvContentStale] = useState(false);
 
   const reloadPhoto = () => {
     fetchMyIntakePhotoUrl()
@@ -570,6 +600,9 @@ export function EditableProfileSection({ account }: { account: Account }) {
           };
           setIntakeStatus(p.status);
           setHasPhoto(p.hasPhoto);
+          if (account.profileUpdatedAt && p.updatedAt) {
+            setCvContentStale(new Date(account.profileUpdatedAt) > new Date(p.updatedAt));
+          }
         } else {
           resolvedForm = formFromPrefill(intake.prefill);
         }
@@ -603,6 +636,7 @@ export function EditableProfileSection({ account }: { account: Account }) {
       const saved = await saveMyIntake(form);
       setIntakeStatus(saved.status);
       setInitialSnapshot(JSON.stringify({ profileAnswers, form }));
+      setCvContentStale(false);
       setSaveStatus('success');
       setSaveDetail('Your matches are already up to date.');
       window.setTimeout(() => {
@@ -624,6 +658,7 @@ export function EditableProfileSection({ account }: { account: Account }) {
       const submitted = await submitMyIntake();
       setIntakeStatus(submitted.status);
       setInitialSnapshot(JSON.stringify({ profileAnswers, form }));
+      setCvContentStale(false);
       setSubmitMessage("Submitted — we'll be in touch once we've reviewed it.");
     } catch (err) {
       setSubmitMessage(err instanceof Error ? err.message : 'Failed to submit — try again.');
@@ -649,7 +684,7 @@ export function EditableProfileSection({ account }: { account: Account }) {
     regionFlexibility: account.regionFlexibility,
   } satisfies ProfileSnapshot);
 
-  function verifiedLabelFor(questionId: AssessmentQuestionId): string | null {
+  function verifiedFieldInfo(questionId: AssessmentQuestionId): VerifiedFieldInfo | null {
     if (!VERIFIABLE_QUESTION_IDS.includes(questionId)) return null;
     const isVerified =
       (questionId === 'highestEducation' && account.verifiedHighestEducation !== null) ||
@@ -660,9 +695,17 @@ export function EditableProfileSection({ account }: { account: Account }) {
     if (!isVerified) return null;
 
     const def = ASSESSMENT_QUESTION_DEFINITIONS.find((d) => d.id === questionId);
-    const value = verifiedAnswers[questionId];
-    if (!def || typeof value !== 'string') return null;
-    return def.options?.find((o) => o.value === value)?.label ?? null;
+    const verifiedValue = verifiedAnswers[questionId];
+    if (!def || typeof verifiedValue !== 'string') return null;
+    const label = def.options?.find((o) => o.value === verifiedValue)?.label;
+    if (!label) return null;
+
+    const currentValue = profileAnswers[questionId];
+    const diverges = typeof currentValue === 'string' && currentValue !== verifiedValue;
+    // MatchingService.cs prefers the verified value over self-report for
+    // these four; passportStatus is verifiable but never read by matching.
+    const affectsMatching = questionId !== 'passportStatus';
+    return { label, diverges, affectsMatching };
   }
 
   if (loadState.status === 'loading') {
@@ -780,9 +823,9 @@ export function EditableProfileSection({ account }: { account: Account }) {
                   value={profileAnswers[definition.id]}
                   onChange={(value) => {
                     setProfileAnswers({ ...profileAnswers, [definition.id]: value });
-                    setProfileChangedSinceSummaryTouch(true);
+                    setCvContentStale(true);
                   }}
-                  verifiedLabel={verifiedLabelFor(definition.id)}
+                  verifiedInfo={verifiedFieldInfo(definition.id)}
                 />
               </div>
             );
@@ -831,6 +874,16 @@ export function EditableProfileSection({ account }: { account: Account }) {
         }}
       />
 
+      {cvContentStale && (
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4">
+          <p className="text-xs font-semibold text-red-700">
+            Your profile changed since you last reviewed your CV details below — have a look at your
+            summary, experience, skills, and certifications to make sure they still match before you rely
+            on this for an application.
+          </p>
+        </div>
+      )}
+
       <section className="rounded-3xl border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -848,17 +901,9 @@ export function EditableProfileSection({ account }: { account: Account }) {
             AI summary
           </button>
         </div>
-        {profileChangedSinceSummaryTouch && (
-          <p className="mt-2 text-xs font-semibold text-red-600">
-            Your profile changed — you may want to update your summary to match.
-          </p>
-        )}
         <textarea
           value={form.summary ?? ''}
-          onChange={(e) => {
-            setForm({ ...form, summary: e.target.value || null });
-            setProfileChangedSinceSummaryTouch(false);
-          }}
+          onChange={(e) => setForm({ ...form, summary: e.target.value || null })}
           rows={3}
           className={`mt-3 ${inputClass}`}
         />

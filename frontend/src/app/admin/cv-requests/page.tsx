@@ -288,10 +288,11 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
 // Combinable (AND'd, not OR'd) toggle filters — unlike status above, a
 // request can independently be e.g. both "needs a draft" and a reference
 // example at the same time, so these are chips, not tabs.
-type AttentionFlag = 'needsDraft' | 'referenceExample';
+type AttentionFlag = 'needsDraft' | 'referenceExample' | 'profileChanged';
 const ATTENTION_FLAGS: { key: AttentionFlag; label: string }[] = [
   { key: 'needsDraft', label: 'Needs a draft' },
   { key: 'referenceExample', label: 'Reference example' },
+  { key: 'profileChanged', label: 'Profile changed since' },
 ];
 
 function matchesFlag(request: AdminCvRequest, flag: AttentionFlag): boolean {
@@ -300,6 +301,8 @@ function matchesFlag(request: AdminCvRequest, flag: AttentionFlag): boolean {
       return !request.hasDraft;
     case 'referenceExample':
       return request.isReferenceExample;
+    case 'profileChanged':
+      return request.profileChangedSinceRequest;
   }
 }
 
@@ -519,6 +522,13 @@ function AdminCvRequestsPageContent() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-slate-400">Requested {formatDateTime(request.createdAt)}</p>
+              {request.profileChangedSinceRequest && (
+                <p className="mt-1.5 text-xs font-semibold text-amber-700">
+                  ⚠ This user&apos;s profile changed since{' '}
+                  {request.hasDraft ? 'this draft was generated' : 'this was requested'} — worth a quick
+                  check before generating or sending.
+                </p>
+              )}
 
               {request.status !== 'Delivered' && (
                 <>

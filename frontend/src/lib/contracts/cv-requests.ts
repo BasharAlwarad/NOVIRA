@@ -29,6 +29,10 @@ export interface AdminCvRequest extends Omit<CvRequest, 'isArchived'> {
   hasDraft: boolean;
   revisionCount: number;
   isReferenceExample: boolean;
+  // True once the user's self-reported profile changed more recently than
+  // this request's own content (its last AI generation, or its submission
+  // if never generated) — never true once Delivered. Added 2026-11-08.
+  profileChangedSinceRequest: boolean;
 }
 
 // Mirrors backend/Models/CvDraftContent.cs — the AI-generated structured
