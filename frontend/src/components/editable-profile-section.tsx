@@ -546,23 +546,30 @@ export function EditableProfileSection({ account }: { account: Account }) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [saveDetail, setSaveDetail] = useState<string | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
+  // Tracked separately from initialSnapshot above (added 2026-11-08) so a
+  // save can tell WHICH half actually changed, not just "something did."
+  const [initialProfileAnswersJson, setInitialProfileAnswersJson] = useState<string | null>(null);
+  const [initialFormJson, setInitialFormJson] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<string | null>(null);
   // Generalized 2026-11-08 from a Summary-only, session-only nudge into
   // one shared banner covering the whole CV-content block (Summary,
   // Experience, Skills, Certifications) — a changed occupation/path can
-  // make any of those read oddly, not just the summary paragraph, and
-  // flagging them one at a time risked looking fixed on reload when it
-  // wasn't. Now backed by the two persisted timestamps that already exist
+  // make any of those read oddly, not just the summary paragraph.
+  // Initialized from the two persisted timestamps that already exist
   // (User.ProfileUpdatedAt vs IntakeProfile.UpdatedAt) so a real reload
-  // doesn't silently clear a genuine staleness — initialized from those on
-  // load, set true the moment any "Your profile" field is edited in this
-  // session, and cleared only by the one shared Save action below (which
-  // re-saves the CV content too, the same moment IntakeProfile.UpdatedAt
-  // itself would catch up). Still doesn't block saving — Summary/
-  // Experience/Skills are CV content, never read by the matching algorithm
-  // (confirmed: MatchingService.cs never references any of them), so this
-  // is a CV-quality nudge, not a matching-correctness gate.
+  // doesn't silently clear a genuine staleness.
+  //
+  // Found live 2026-11-08: an earlier version of this set the flag the
+  // moment a "Your profile" field was *touched* (before Save), which read
+  // as "this already happened" for a selection the user hadn't committed
+  // yet — misleading, since nothing is actually saved until Save is
+  // clicked. Now only (re)computed on a successful Save/Submit, by
+  // comparing what actually changed in THAT save: true only when the
+  // profile half changed but the CV-content half didn't (i.e. you updated
+  // your occupation/level/etc. without also touching your summary,
+  // experience, skills, or certifications in that same save) — false
+  // whenever both changed together (you clearly already looked at both).
   const [cvContentStale, setCvContentStale] = useState(false);
 
   const reloadPhoto = () => {
@@ -610,6 +617,8 @@ export function EditableProfileSection({ account }: { account: Account }) {
         // Snapshot the just-loaded values so the floating save button can
         // tell "edited" from "untouched" — see its render below.
         setInitialSnapshot(JSON.stringify({ profileAnswers: sanitizedAnswers, form: resolvedForm }));
+        setInitialProfileAnswersJson(JSON.stringify(sanitizedAnswers));
+        setInitialFormJson(JSON.stringify(resolvedForm));
 
         setLoadState({ status: 'loaded' });
         reloadPhoto();
@@ -632,11 +641,16 @@ export function EditableProfileSection({ account }: { account: Account }) {
     setSaveStatus('saving');
     setSaveDetail(null);
     try {
+      const profileChangedThisSave = JSON.stringify(profileAnswers) !== initialProfileAnswersJson;
+      const cvContentChangedThisSave = JSON.stringify(form) !== initialFormJson;
+
       await updateMyProfile(buildProfileSnapshot(profileAnswers));
       const saved = await saveMyIntake(form);
       setIntakeStatus(saved.status);
       setInitialSnapshot(JSON.stringify({ profileAnswers, form }));
-      setCvContentStale(false);
+      setInitialProfileAnswersJson(JSON.stringify(profileAnswers));
+      setInitialFormJson(JSON.stringify(form));
+      setCvContentStale(profileChangedThisSave && !cvContentChangedThisSave);
       setSaveStatus('success');
       setSaveDetail('Your matches are already up to date.');
       window.setTimeout(() => {
@@ -653,12 +667,17 @@ export function EditableProfileSection({ account }: { account: Account }) {
     setSubmitting(true);
     setSubmitMessage(null);
     try {
+      const profileChangedThisSave = JSON.stringify(profileAnswers) !== initialProfileAnswersJson;
+      const cvContentChangedThisSave = JSON.stringify(form) !== initialFormJson;
+
       await updateMyProfile(buildProfileSnapshot(profileAnswers));
       await saveMyIntake(form);
       const submitted = await submitMyIntake();
       setIntakeStatus(submitted.status);
       setInitialSnapshot(JSON.stringify({ profileAnswers, form }));
-      setCvContentStale(false);
+      setInitialProfileAnswersJson(JSON.stringify(profileAnswers));
+      setInitialFormJson(JSON.stringify(form));
+      setCvContentStale(profileChangedThisSave && !cvContentChangedThisSave);
       setSubmitMessage("Submitted — we'll be in touch once we've reviewed it.");
     } catch (err) {
       setSubmitMessage(err instanceof Error ? err.message : 'Failed to submit — try again.');
@@ -773,10 +792,13 @@ export function EditableProfileSection({ account }: { account: Account }) {
           end of that section (e.g. Passport Status) scrolls the inline
           note itself out of view the moment you reach it, which is the
           exact case that was reported as "no note anywhere." Stacked right
-          above the floating Save button — the two become true at the same
-          moment (editing a profile field dirties the combined snapshot the
-          Save button already watches), so they read as one connected
-          signal rather than two separate things. */}
+          above the floating Save button, but — found live the same day —
+          only ever becomes true as the OUTCOME of a Save (see
+          handleSaveAll/handleSubmit's profileChangedThisSave &&
+          !cvContentChangedThisSave check), never while just clicking
+          through options before committing; an earlier version set it on
+          every field onChange, which read as "this already happened" for
+          a selection nothing had actually saved yet. */}
       {cvContentStale && (
         <p className="fixed bottom-20 left-5 z-40 max-w-[16rem] rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 shadow-lg">
           Your profile changed — review your summary, experience, skills, and certifications below before
@@ -838,10 +860,7 @@ export function EditableProfileSection({ account }: { account: Account }) {
                 <ProfileField
                   definition={definition}
                   value={profileAnswers[definition.id]}
-                  onChange={(value) => {
-                    setProfileAnswers({ ...profileAnswers, [definition.id]: value });
-                    setCvContentStale(true);
-                  }}
+                  onChange={(value) => setProfileAnswers({ ...profileAnswers, [definition.id]: value })}
                   verifiedInfo={verifiedFieldInfo(definition.id)}
                 />
               </div>
