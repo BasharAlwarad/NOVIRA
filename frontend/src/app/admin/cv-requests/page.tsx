@@ -16,6 +16,7 @@ import {
 } from '@/lib/api/admin-cv-requests';
 import type { AdminCvRequest, CvDraftResult, CvRequestStatus } from '@/lib/contracts/cv-requests';
 import { useAdminKey } from '@/hooks/useAdminKey';
+import { useAdminReplyNotifications } from '@/hooks/useAdminReplyNotifications';
 import { openInNewTabAfterFetch } from '@/lib/open-in-new-tab';
 
 const STATUS_STYLES: Record<CvRequestStatus, string> = {
@@ -324,6 +325,7 @@ function parseFlagsParam(value: string | null): Set<AttentionFlag> {
 // the reviewed text from here into that message by hand.
 function AdminCvRequestsPageContent() {
   const { adminKey } = useAdminKey();
+  const { cvRequestsNeedingAttention, clearCvRequestsAttention } = useAdminReplyNotifications();
   const [requests, setRequests] = useState<AdminCvRequest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -345,6 +347,23 @@ function AdminCvRequestsPageContent() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Visiting this page is "I looked at the queue" — clears the nav dot's
+  // whole Set at once, and a live push while we're already here just
+  // triggers a refetch (same pattern /admin/inbox uses for its own dot),
+  // not a second, separate "seen" action per card.
+  useEffect(() => {
+    clearCvRequestsAttention();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (cvRequestsNeedingAttention.size > 0) {
+      load();
+      clearCvRequestsAttention();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cvRequestsNeedingAttention]);
 
   const handleAdvance = async (request: AdminCvRequest, nextStatus: CvRequestStatus) => {
     setUpdatingId(request.id);

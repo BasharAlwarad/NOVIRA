@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Novira.Backend.Data;
+using Novira.Backend.Hubs;
 using Novira.Backend.Models;
 using Novira.Backend.Services;
 
@@ -104,11 +106,26 @@ public static class AccountEndpoints
         // account, no token/re-verification needed since ownership is
         // already proven by the session itself. Same overwrite-on-every-
         // capture semantics as every other profile write (ApplyTo, Program.cs).
-        group.MapPost("/profile", async (HttpContext httpContext, ProfileSnapshot request, AppDbContext db) =>
+        group.MapPost("/profile", async (
+            HttpContext httpContext, ProfileSnapshot request, AppDbContext db, IHubContext<MessagesHub> hub) =>
         {
             var user = (User)httpContext.Items["CurrentUser"]!;
             request.ApplyTo(user);
             await db.SaveChangesAsync();
+
+            // Live nudge for the admin's CV-requests nav dot (2026-11-08) —
+            // the other half of CvRequestsAdminEndpoints.cs's
+            // ProfileChangedSinceRequest: a pending request already shows
+            // this on next page load, this makes it show up live too,
+            // same as a brand-new request does.
+            var pendingRequestIds = await db.CvRequests
+                .Where(r => r.UserId == user.Id && r.Status != CvRequestStatus.Delivered)
+                .Select(r => r.Id)
+                .ToListAsync();
+            foreach (var cvRequestId in pendingRequestIds)
+            {
+                await hub.PushCvRequestAttentionAsync(user.Id, cvRequestId);
+            }
 
             return Results.Ok(new { hasProfile = user.ProfileUpdatedAt is not null });
         });

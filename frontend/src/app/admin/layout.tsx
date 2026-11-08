@@ -37,6 +37,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [checked, setChecked] = useState(false);
   const [keyInput, setKeyInput] = useState('');
   const [unreadReplyUserIds, setUnreadReplyUserIds] = useState<Set<string>>(new Set());
+  const [cvRequestsNeedingAttention, setCvRequestsNeedingAttention] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -84,14 +85,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // correction) — the Users list renders a per-row note from this, and the
   // user's own detail page clears its entry via markUserReplySeen once
   // actually opened.
-  useAdminLiveMessages(adminKey, (push) => {
-    setUnreadReplyUserIds((current) => {
-      if (current.has(push.userId)) return current;
-      const next = new Set(current);
-      next.add(push.userId);
-      return next;
-    });
-  });
+  useAdminLiveMessages(
+    adminKey,
+    (push) => {
+      setUnreadReplyUserIds((current) => {
+        if (current.has(push.userId)) return current;
+        const next = new Set(current);
+        next.add(push.userId);
+        return next;
+      });
+    },
+    // A new CV request, or a pending one whose user's profile just changed
+    // underneath it (2026-11-08) — see CvRequestAttentionPush's own
+    // comment. Tracked by cvRequestId, not userId, since one user can have
+    // several pending requests independently needing a look.
+    (push) => {
+      setCvRequestsNeedingAttention((current) => {
+        if (current.has(push.cvRequestId)) return current;
+        const next = new Set(current);
+        next.add(push.cvRequestId);
+        return next;
+      });
+    }
+  );
 
   const markUserReplySeen = useCallback((userId: string) => {
     setUnreadReplyUserIds((current) => {
@@ -100,6 +116,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       next.delete(userId);
       return next;
     });
+  }, []);
+
+  // Visiting the queue itself is "I looked" — clears everything at once
+  // rather than per-card, see this context's own comment for why.
+  const clearCvRequestsAttention = useCallback(() => {
+    setCvRequestsNeedingAttention((current) => (current.size === 0 ? current : new Set()));
   }, []);
 
   const handleUnlock = (event: React.FormEvent<HTMLFormElement>) => {
@@ -148,7 +170,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminKeyContext.Provider value={{ adminKey, clearAdminKey }}>
-      <AdminReplyNotificationsContext.Provider value={{ unreadReplyUserIds, markUserReplySeen }}>
+      <AdminReplyNotificationsContext.Provider
+        value={{ unreadReplyUserIds, markUserReplySeen, cvRequestsNeedingAttention, clearCvRequestsAttention }}
+      >
         <div className="min-h-screen bg-slate-50">
           <header className="border-b border-slate-200 bg-white">
             <div className="mx-auto flex w-full max-w-3xl items-center px-4 py-3 sm:px-6">
@@ -196,6 +220,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           <span
                             className="h-2 w-2 rounded-full bg-emerald-500"
                             aria-label="New message from a user"
+                          />
+                        )}
+                        {/* Same dot-not-count convention as Inbox's above,
+                          for the same reason — added 2026-11-08. Lit by
+                          CvRequestAttentionPush: a brand-new request, or a
+                          pending one whose user's profile changed
+                          underneath it. Cleared on visiting this page
+                          itself (useAdminReplyNotifications's
+                          clearCvRequestsAttention), not per-card. */}
+                        {item.href === '/admin/cv-requests' && cvRequestsNeedingAttention.size > 0 && (
+                          <span
+                            className="h-2 w-2 rounded-full bg-emerald-500"
+                            aria-label="A CV request needs attention"
                           />
                         )}
                       </Link>

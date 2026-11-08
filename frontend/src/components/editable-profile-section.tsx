@@ -766,6 +766,23 @@ export function EditableProfileSection({ account }: { account: Account }) {
           there's something to save, green on a successful save (fading
           back to hidden after a couple seconds, since there's nothing left
           unsaved), red with the real error message if the save fails. */}
+      {/* Fixed-position so it survives scrolling anywhere on this (long)
+          page — found live 2026-11-08: the first version of this note was
+          placed inline at the top of "Your profile," which only helped if
+          the user happened to still be scrolled there. A field near the
+          end of that section (e.g. Passport Status) scrolls the inline
+          note itself out of view the moment you reach it, which is the
+          exact case that was reported as "no note anywhere." Stacked right
+          above the floating Save button — the two become true at the same
+          moment (editing a profile field dirties the combined snapshot the
+          Save button already watches), so they read as one connected
+          signal rather than two separate things. */}
+      {cvContentStale && (
+        <p className="fixed bottom-20 left-5 z-40 max-w-[16rem] rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 shadow-lg">
+          Your profile changed — review your summary, experience, skills, and certifications below before
+          relying on this CV.
+        </p>
+      )}
       {showSaveButton && (
         <button
           type="button"
@@ -873,16 +890,6 @@ export function EditableProfileSection({ account }: { account: Account }) {
           setPhotoUrl(null);
         }}
       />
-
-      {cvContentStale && (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-4">
-          <p className="text-xs font-semibold text-red-700">
-            Your profile changed since you last reviewed your CV details below — have a look at your
-            summary, experience, skills, and certifications to make sure they still match before you rely
-            on this for an application.
-          </p>
-        </div>
-      )}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">

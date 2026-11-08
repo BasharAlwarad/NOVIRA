@@ -30,3 +30,12 @@ export interface NewReplyPush {
   userId: string;
   message: Message;
 }
+
+// Mirrors backend/Hubs/MessagesHub.cs's CvRequestAttentionPush — pushed to
+// every connected admin when a CV request needs a look: either a brand-new
+// request, or a pending (non-Delivered) request whose user's profile just
+// changed underneath it. Added 2026-11-08 for the CV-requests nav dot.
+export interface CvRequestAttentionPush {
+  userId: string;
+  cvRequestId: string;
+}

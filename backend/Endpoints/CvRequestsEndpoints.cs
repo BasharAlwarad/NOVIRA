@@ -104,6 +104,13 @@ public static class CvRequestsEndpoints
                 "CV request received",
                 $"We've received your request for a CV/cover letter for \"{opportunity.Title}\" at {opportunity.Provider}. We'll review your profile and be in touch.");
 
+            // Live nudge for the admin's CV-requests nav dot (2026-11-08) —
+            // CreateAdminMessageAsync's own push above only reaches the
+            // USER's connection (it's an admin->user confirmation), so a
+            // new request was previously invisible to the admin until their
+            // next manual page load.
+            await hub.PushCvRequestAttentionAsync(user.Id, cvRequest.Id);
+
             return Results.Created($"/cv-requests/{cvRequest.Id}", ToResponse(cvRequest, isArchived: false));
         });
     }

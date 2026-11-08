@@ -70,16 +70,29 @@ public class MessagesHub(LiveMessagingTicketStore ticketStore, IConfiguration co
 // scopes it) since one admin connection receives replies from every user.
 public record NewReplyPush(Guid UserId, MessageResponse Message);
 
+// Added 2026-11-08 for the CV-requests nav dot (mirrors the Inbox dot's
+// unreadReplyUserIds, same shared-group broadcast shape as NewReplyPush
+// above) — pushed on two distinct triggers, both meaning "the CV-requests
+// queue needs a look": a brand-new request just came in, or a pending
+// (non-Delivered) request's profile changed underneath it since its last
+// generation/submission (CvRequestsAdminEndpoints.cs's
+// ProfileChangedSinceRequest, now live instead of only visible on next
+// page load).
+public record CvRequestAttentionPush(Guid UserId, Guid CvRequestId);
+
 public static class MessagesHubExtensions
 {
-    // "newMessage" / "newReply" are the event names the frontend's SignalR
-    // clients listen for (see useLiveMessages.ts / useAdminLiveMessages.ts)
-    // — kept as plain string constants here rather than a shared contract
-    // file, since SignalR's own protocol already couples client/server on
-    // the method name string.
+    // "newMessage" / "newReply" / "cvRequestAttention" are the event names
+    // the frontend's SignalR clients listen for (see useLiveMessages.ts /
+    // useAdminLiveMessages.ts) — kept as plain string constants here rather
+    // than a shared contract file, since SignalR's own protocol already
+    // couples client/server on the method name string.
     public static Task PushNewMessageAsync(this IHubContext<MessagesHub> hub, Guid userId, MessageResponse message) =>
         hub.Clients.Group($"{MessagesHub.UserGroupPrefix}{userId}").SendAsync("newMessage", message);
 
     public static Task PushNewReplyAsync(this IHubContext<MessagesHub> hub, Guid userId, MessageResponse message) =>
         hub.Clients.Group(MessagesHub.AdminGroup).SendAsync("newReply", new NewReplyPush(userId, message));
+
+    public static Task PushCvRequestAttentionAsync(this IHubContext<MessagesHub> hub, Guid userId, Guid cvRequestId) =>
+        hub.Clients.Group(MessagesHub.AdminGroup).SendAsync("cvRequestAttention", new CvRequestAttentionPush(userId, cvRequestId));
 }
