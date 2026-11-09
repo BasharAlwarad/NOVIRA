@@ -785,25 +785,33 @@ export function EditableProfileSection({ account }: { account: Account }) {
           there's something to save, green on a successful save (fading
           back to hidden after a couple seconds, since there's nothing left
           unsaved), red with the real error message if the save fails. */}
-      {/* Fixed-position so it survives scrolling anywhere on this (long)
-          page — found live 2026-11-08: the first version of this note was
-          placed inline at the top of "Your profile," which only helped if
-          the user happened to still be scrolled there. A field near the
-          end of that section (e.g. Passport Status) scrolls the inline
-          note itself out of view the moment you reach it, which is the
-          exact case that was reported as "no note anywhere." Stacked right
-          above the floating Save button, but — found live the same day —
-          only ever becomes true as the OUTCOME of a Save (see
-          handleSaveAll/handleSubmit's profileChangedThisSave &&
-          !cvContentChangedThisSave check), never while just clicking
-          through options before committing; an earlier version set it on
-          every field onChange, which read as "this already happened" for
-          a selection nothing had actually saved yet. */}
+      {/* A real DaisyUI toast (not a hand-rolled fixed div — see
+          novira-ui-patterns) so it survives scrolling anywhere on this
+          (long) page without needing its own manual coordinates — found
+          live 2026-11-08: the first version was placed inline at the top
+          of "Your profile," which only helped if the user happened to
+          still be scrolled there. toast-bottom/toast-center deliberately
+          avoids both corners already claimed on this page (Save button at
+          bottom-5 left-5, SiteNav's FloatingContactButton at bottom-5
+          right-5 — see novira-ui-patterns's position map). Amber, not red
+          — this is a reminder to double-check something, not a failure
+          (see that skill's color-semantics table). Only ever becomes true
+          as the OUTCOME of a Save (handleSaveAll/handleSubmit's
+          profileChangedThisSave && !cvContentChangedThisSave), never while
+          just clicking through options before committing — an earlier
+          version set it on every field onChange, which read as "this
+          already happened" for a selection nothing had actually saved
+          yet. */}
       {cvContentStale && (
-        <p className="fixed bottom-20 left-5 z-40 max-w-[16rem] rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 shadow-lg">
-          Your profile changed — review your summary, experience, skills, and certifications below before
-          relying on this CV.
-        </p>
+        <div className="toast toast-bottom toast-center z-40">
+          <div
+            role="alert"
+            className="max-w-xs rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800 shadow-lg"
+          >
+            Your profile changed — review your summary, experience, skills, and certifications below before
+            relying on this CV.
+          </div>
+        </div>
       )}
       {showSaveButton && (
         <button
