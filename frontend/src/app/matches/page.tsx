@@ -1062,7 +1062,11 @@ function MatchesPageContent() {
               ) : (
                 <>
                   <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-4">
+                    {/* Outside the collapsible (fixed 2026-11-09) — see the
+                      non-Free branch below for the full reasoning (same fix,
+                      same component, same regression it closes). */}
+                    <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                     {/* Collapsed by default — same fix and reasoning as the
                       non-Free branch above. */}
                     <CollapsibleSection title="Upgrade options" defaultOpen={false}>
@@ -1071,7 +1075,6 @@ function MatchesPageContent() {
                           effectiveTier={state.effectiveTier}
                           totalMatchCount={state.blurredCount + state.matches.length}
                         />
-                        <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                       </div>
                     </CollapsibleSection>
                   </div>
@@ -1129,7 +1132,17 @@ function MatchesPageContent() {
                 <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
               </div>
 
-              <div className="mb-6">
+              <div className="mb-6 space-y-4">
+                {/* Outside the collapsible (fixed 2026-11-09, found by the
+                  tier-journey study — Monetization-Strategy.md §4.2b): a
+                  user's own active Tier 3 case status (e.g. "we'll reach
+                  out to schedule a conversation") was getting buried behind
+                  this same collapsed accordion, confirmed live with a real
+                  in-progress case. Tier3RequestCard self-decides whether to
+                  show that status or, with no case yet, just a single
+                  compact Gold pitch card — small enough alone not to
+                  reintroduce the FAB-overlap problem below. */}
+                <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                 {/* Collapsed by default (found live 2026-11-09, same
                   reasoning as /account's own copy of this section) —
                   upsell content open by default pushed the path tabs
@@ -1139,7 +1152,6 @@ function MatchesPageContent() {
                 <CollapsibleSection title="Upgrade options" defaultOpen={false}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                     <TierUpgradeOptions effectiveTier={state.effectiveTier} />
-                    <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
                   </div>
                 </CollapsibleSection>
               </div>

@@ -247,15 +247,27 @@ const TIER_LABELS: Record<EffectiveTier, string> = {
 // CollapsibleSection now, same as /matches (round 21).
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
-    // Collapsed by default (found live 2026-11-09) — this is upsell content,
-    // and rendering it open by default pushed the user's own profile below
-    // the fold on first load, the one thing /account actually exists to show.
-    <CollapsibleSection title="Upgrade options" defaultOpen={false}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-        <TierUpgradeOptions effectiveTier={effectiveTier} />
-        <Tier3RequestCard effectiveTier={effectiveTier} compact />
-      </div>
-    </CollapsibleSection>
+    <div className="space-y-4">
+      {/* Tier3RequestCard stays outside the collapsible (fixed 2026-11-09,
+        found by the tier-journey study — Monetization-Strategy.md §4.2b).
+        It self-decides whether to show a user's own active case status (a
+        live case must never be hidden behind a collapsed accordion — this
+        exact bug buried "we'll reach out to schedule a conversation" from
+        a real in-progress case) or, with no case yet, a single compact Gold
+        pitch card — small enough on its own not to reintroduce the
+        above-the-fold crowding this section's own collapse was built to
+        fix. TierUpgradeOptions (Bronze/Silver, up to 2 cards) is the part
+        that's purely upsell and still collapses by default. */}
+      <Tier3RequestCard effectiveTier={effectiveTier} compact />
+      {/* Collapsed by default (found live 2026-11-09) — this is upsell content,
+        and rendering it open by default pushed the user's own profile below
+        the fold on first load, the one thing /account actually exists to show. */}
+      <CollapsibleSection title="Upgrade options" defaultOpen={false}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+          <TierUpgradeOptions effectiveTier={effectiveTier} />
+        </div>
+      </CollapsibleSection>
+    </div>
   );
 }
 
