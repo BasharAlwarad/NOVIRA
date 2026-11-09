@@ -97,7 +97,13 @@ export function isTier2PurchaseEnabled(): boolean {
   return TIER2_PAYMENT_LINK.length > 0;
 }
 
-function tier2HasCarryUpDiscount(effectiveTier: EffectiveTier): boolean {
+// Exported (found live 2026-11-09, tier-journey study) — /plans/tier-2
+// needs this itself to decide whether to say the discount is actually
+// being applied, not just silently show a lower number with no
+// explanation. Same reasoning as the carry-up-credit research in
+// Monetization-Strategy.md §4.2b: state the credit explicitly, don't
+// leave it implicit in a bare final price.
+export function tier2HasCarryUpDiscount(effectiveTier: EffectiveTier): boolean {
   return effectiveTier === 'Tier1' && TIER2_PAYMENT_LINK_FROM_TIER1.length > 0;
 }
 

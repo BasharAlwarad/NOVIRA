@@ -1094,7 +1094,19 @@ export function EditableProfileSection({ account }: { account: Account }) {
       </CollapsibleSection>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Clarifying line added 2026-11-09 (tier-journey study) — this
+          button's label only names the CV, but handleSubmit also saves
+          "Your profile" above in the same action. That's correct and
+          intentional (the floating Save button already does the same
+          combined save, just without submitting) — the gap was purely
+          that a user reading just the button label had no way to know
+          their matching-profile answers were part of it too. */}
+        <p className="text-xs text-slate-500">
+          Submits your CV content below for a human review. Your profile answers above are saved
+          in the same action, but aren&apos;t part of what gets reviewed here — they&apos;re what
+          your matches are based on.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleSubmit}

@@ -7,7 +7,14 @@ import { SiteFooter } from '@/components/site-footer';
 import { SiteNav } from '@/components/site-nav';
 import { fetchMyAccount } from '@/lib/api/account';
 import { TierBadge } from '@/components/tier-badge';
-import { getTier2PaymentLink, getTier2PriceEur, isTier2PurchaseEnabled } from '@/lib/tier-pricing';
+import {
+  getTier2PaymentLink,
+  getTier2PriceEur,
+  isTier2PurchaseEnabled,
+  TIER1_PRICE_EUR,
+  TIER2_PRICE_EUR,
+  tier2HasCarryUpDiscount,
+} from '@/lib/tier-pricing';
 import type { EffectiveTier } from '@/lib/contracts/account';
 
 // Round 6: this page used to render a static price/link (TIER2_PRICE_EUR,
@@ -36,12 +43,30 @@ function PriceAndUnlockButton({ variant = 'hero' }: { variant?: 'hero' | 'footer
   }, []);
 
   const priceEur = getTier2PriceEur(effectiveTier);
+  const hasDiscount = tier2HasCarryUpDiscount(effectiveTier);
+  const mutedTextClass = variant === 'hero' ? 'text-slate-300' : 'text-slate-500';
 
   return (
     <>
       <p className={`mt-2 text-xl font-semibold ${variant === 'hero' ? 'text-slate-100' : 'text-slate-600'}`}>
+        {hasDiscount && (
+          <span className={`mr-2 text-base font-normal line-through ${mutedTextClass}`}>
+            €{TIER2_PRICE_EUR}
+          </span>
+        )}
         €{priceEur}
       </p>
+      {/* Stated explicitly as its own line (found live 2026-11-09, tier-
+        journey study) — a bare lower number next to a full-price line is
+        exactly the kind of thing that reads as "did I get overcharged?"
+        without this sentence. Pattern: Monetization-Strategy.md §4.2b's
+        carry-up-credit research. */}
+      {hasDiscount && (
+        <p className={`mt-1 text-xs ${mutedTextClass}`}>
+          Your €{TIER1_PRICE_EUR} Tier 1 payment is credited toward this — you pay the difference, not
+          the full price again.
+        </p>
+      )}
       <div className="mt-6">
         {isTier2PurchaseEnabled() ? (
           <a
