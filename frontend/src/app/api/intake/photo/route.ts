@@ -15,6 +15,12 @@ export async function GET() {
     headers: { 'X-Session-Token': sessionToken },
   });
 
+  // 204 (no photo set) carries no body — Response.json() can't set a body
+  // on a no-content status, so relay it directly rather than parsing.
+  if (backendResponse.status === 204) {
+    return new Response(null, { status: 204 });
+  }
+
   const text = await backendResponse.text();
   const data = text ? JSON.parse(text) : null;
 

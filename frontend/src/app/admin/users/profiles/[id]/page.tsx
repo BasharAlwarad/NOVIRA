@@ -15,7 +15,6 @@ import type { AdminAppliedMatch, AdminDocument, AdminPurchase, AdminUserDetail, 
 import type { IntakeProfile, IntakeStatus } from '@/lib/contracts/intake';
 import { CompactMessageThread } from '@/components/admin/admin-message-thread';
 import { useAdminKey } from '@/hooks/useAdminKey';
-import { useAdminLiveMessages } from '@/hooks/useAdminLiveMessages';
 import { useAdminReplyNotifications } from '@/hooks/useAdminReplyNotifications';
 
 function humanizeEnumValue(value: string): string {
@@ -774,7 +773,7 @@ export default function AdminUserProfilePage() {
   const userId = params.id;
 
   const { adminKey, clearAdminKey } = useAdminKey();
-  const { markUserReplySeen } = useAdminReplyNotifications();
+  const { unreadReplyUserIds, markUserReplySeen } = useAdminReplyNotifications();
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recomputing, setRecomputing] = useState(false);
@@ -810,12 +809,23 @@ export default function AdminUserProfilePage() {
   // found live 2026-09-30. Same "refetch the whole user" pattern as
   // handleReview below, not a local splice. Also clears the note
   // immediately rather than leaving it flagged until the next list visit.
-  useAdminLiveMessages(adminKey, (push) => {
-    if (push.userId === userId) {
+  //
+  // Fixed 2026-11-09: this used to call useAdminLiveMessages directly,
+  // opening a second, independent SignalR connection on top of the one
+  // AdminLayout already keeps open for its whole lifetime — exactly the
+  // "two sockets doing the same job" anti-pattern useAdminLiveMessages's
+  // own comment warns against (confirmed live: every admin user-detail
+  // page logged a real "Failed to start the connection... stopped during
+  // negotiation" console error from the resulting race). Watching the
+  // layout's own shared `unreadReplyUserIds` set — already updated by its
+  // one connection — gets the same live refresh with no second socket.
+  useEffect(() => {
+    if (unreadReplyUserIds.has(userId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadUser();
       markUserReplySeen(userId);
     }
-  });
+  }, [unreadReplyUserIds, userId, loadUser, markUserReplySeen]);
 
   // Refetches the whole user rather than locally patching one field — a
   // review action can touch documents, verified data, the fraud flag, AND

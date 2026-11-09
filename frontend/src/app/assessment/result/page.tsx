@@ -115,9 +115,17 @@ export default function AssessmentResultPage() {
 
   if (!answers) {
     return (
-      <main className="min-h-screen bg-slate-50 text-slate-900">
+      // flex flex-col + flex-1 on the content section (found live 2026-11-09):
+      // this empty state's content is short, and body's own global
+      // min-height:100vh (globals.css) left a large blank band below the
+      // footer instead of the footer sitting at the bottom. This pins it
+      // there properly (sticky footer), same fix as signin/auth-verify/
+      // account-delete/confirm-delete. The non-empty branch below keeps
+      // plain min-h-screen since real results routinely fill the viewport
+      // on their own.
+      <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
         <SiteNav />
-        <section className="mx-auto w-full max-w-2xl px-4 py-16 text-center sm:px-6">
+        <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-16 text-center sm:px-6">
           <h1 className="text-2xl font-semibold text-slate-950">
             We couldn&apos;t find a saved assessment
           </h1>

@@ -1,9 +1,13 @@
 import type { RequirementCheck, RequirementStatus } from '@/lib/eligibility-check';
 
+// `fixed` was `blue` (found live 2026-11-09) — off the app's documented
+// emerald/slate/red/amber/sky palette with no real reason for the one-off;
+// `sky` (the established "info accent" color) covers the same "distinct
+// from met/addressable, not actually an error" need.
 const STATUS_STYLES: Record<RequirementStatus, string> = {
   met: 'bg-emerald-50 text-emerald-700',
   addressable: 'bg-amber-50 text-amber-700',
-  fixed: 'bg-blue-50 text-blue-700',
+  fixed: 'bg-sky-50 text-sky-700',
 };
 
 const STATUS_LABELS: Record<RequirementStatus, string> = {

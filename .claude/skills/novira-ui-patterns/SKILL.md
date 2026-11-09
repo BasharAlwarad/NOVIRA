@@ -9,11 +9,14 @@ Found live 2026-11-08/09: a staleness note was hand-placed at `fixed bottom-20 l
 
 ## 1. The current map of fixed-position elements (check before adding a new one)
 
+Re-grepped and refreshed 2026-11-09 — was stale (missing the toast row below).
+
 | Element | Position | File |
 |---|---|---|
-| `FloatingContactButton` | `bottom-5 right-5` | `site-nav.tsx` |
+| `FloatingContactButton` | `bottom-5 right-5` (hidden on `/account/messages` — that page already *is* the same `MessagesPanel` the drawer opens) | `site-nav.tsx` |
 | Its slide-up drawer | `inset-0` (full overlay) | `site-nav.tsx` |
 | Profile page floating Save button | `bottom-5 left-5` | `editable-profile-section.tsx` |
+| CV-content staleness notice | `toast toast-bottom toast-center` (the real DaisyUI toast §2 describes — not a hand-rolled `fixed` div) | `editable-profile-section.tsx` |
 | Sticky nav header | `sticky top-0 z-50` | `site-nav.tsx` |
 
 Both bottom corners are claimed. A new floating notice belongs at `toast-bottom toast-center` (see §2) or, if it must be a corner, check this table is still current first — it will drift as the app grows, so re-grep before trusting it stale:
@@ -42,7 +45,14 @@ DaisyUI ships purpose-built primitives for exactly the "floating notice" pattern
 | `amber` (50/100) | Caution, review-this, non-blocking warning | ~15 uses |
 | `sky` | Occasional info accent | rare |
 
-A "you should double-check this" notice (non-blocking, nothing failed) is `amber`, not `red` — `red` reads as "something broke," which overstates a reminder. Re-grep before trusting these counts stale: `grep -rohE "bg-(emerald|red|amber|slate|sky|blue)-[0-9]+" src --include="*.tsx" | sort | uniq -c | sort -rn`.
+A "you should double-check this" notice (non-blocking, nothing failed) is `amber`, not `red` — `red` reads as "something broke," which overstates a reminder. Re-grep before trusting these counts stale: `grep -rohE "bg-(emerald|red|amber|slate|sky|blue|indigo|yellow)-[0-9]+" src --include="*.tsx" | sort | uniq -c | sort -rn`.
+
+**Deliberate exceptions found live 2026-11-09** (don't "fix" these back to the five above without re-reading why first — each has its own reasoning in a comment at the cited line):
+- `yellow` (`tier3-request.tsx` ~line 233) — the Tier 3 request card on `/account`, tying it visually to the Gold/Tier3 medallion banner above it. Gold-tier branding, not a caution/warning use of yellow.
+- `blue` (`editable-profile-section.tsx` ~line 782) — the floating Save button's idle/ready-to-save state, kept visually distinct from its own `emerald` (just saved) and `red` (save failed) states. Reusing `emerald` for both "ready" and "just succeeded" would blur that feedback.
+- `indigo` (`admin/tier3-cases.tsx` `STATUS_STYLES`) — the Tier 3 case pipeline has 8 distinct stages; the 5-color core palette doesn't have enough non-conflicting hues to keep all 8 visually distinct on this admin-only (not customer-facing) status board.
+
+One real fix came out of the same pass: `EligibilityChecklist.tsx`'s `fixed` status was `blue` with no stated reason — switched to `sky` (the existing "info accent" color already covers "distinct from met/addressable, not an error").
 
 ## 4. Research before placing, every time — not just for big redesigns
 

@@ -72,7 +72,7 @@ export async function uploadMyIntakePhoto(file: File): Promise<IntakeProfile> {
 export async function fetchMyIntakePhotoUrl(): Promise<string | null> {
   const response = await fetch('/api/intake/photo');
 
-  if (response.status === 404) {
+  if (response.status === 204 || response.status === 404) {
     return null;
   }
   if (response.status === 401) {

@@ -114,9 +114,9 @@ function ConfirmDeleteContent() {
 // to /auth/verify/page.tsx and the admin opportunities path pages.
 export default function ConfirmDeleteAccountPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <SiteNav />
-      <section className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
+      <section className="mx-auto w-full max-w-lg flex-1 px-4 py-16 sm:px-6">
         <Suspense fallback={<p className="text-sm text-slate-500">Loading…</p>}>
           <ConfirmDeleteContent />
         </Suspense>

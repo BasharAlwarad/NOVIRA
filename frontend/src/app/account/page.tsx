@@ -247,7 +247,10 @@ const TIER_LABELS: Record<EffectiveTier, string> = {
 // CollapsibleSection now, same as /matches (round 21).
 function PlanSection({ effectiveTier }: { effectiveTier: EffectiveTier }) {
   return (
-    <CollapsibleSection title="Upgrade options">
+    // Collapsed by default (found live 2026-11-09) — this is upsell content,
+    // and rendering it open by default pushed the user's own profile below
+    // the fold on first load, the one thing /account actually exists to show.
+    <CollapsibleSection title="Upgrade options" defaultOpen={false}>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
         <TierUpgradeOptions effectiveTier={effectiveTier} />
         <Tier3RequestCard effectiveTier={effectiveTier} compact />

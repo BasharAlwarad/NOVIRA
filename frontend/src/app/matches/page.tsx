@@ -701,12 +701,17 @@ function MatchCard({
 
 // Split by path (built 2026-09-09) — was one flat list across both real
 // paths; sectioning makes each path's own count/empty-state visible
-// instead of a single blended total. emptyMessage is shown only when the
-// section has real (if currently empty) data behind it — null renders a
-// bare, unexplained "0" instead, for the Work section below, which has no
-// backing data or matching logic at all (Opportunity's own path type
-// doesn't even have an Employment value) — deliberately no messaging about
-// scope or timing here, just the fact of the count.
+// instead of a single blended total.
+//
+// Paginated in batches (found live 2026-11-09) — a Tier2+ user with a real
+// 30+-match batch got every card fully expanded at once, each one ~400px
+// with its always-visible fit-reasoning bullets, for a single-section
+// scroll in the tens of thousands of pixels. `visibleCount` resets to the
+// first batch whenever the caller gives this a fresh `key` (the page does
+// this on `statusFilter` changes) — switching paths already remounts this
+// component entirely via the `activeTab === ...` branches it's called from.
+const MATCHES_PER_BATCH = 8;
+
 function MatchSection({
   matches,
   emptyMessage,
@@ -724,6 +729,10 @@ function MatchSection({
   matchActivityByOpportunity: Record<string, MatchActivity>;
   onMatchActivityChanged: (opportunityId: string, activity: MatchActivity | null) => void;
 }) {
+  const [visibleCount, setVisibleCount] = useState(MATCHES_PER_BATCH);
+  const visibleMatches = matches.slice(0, visibleCount);
+  const remaining = matches.length - visibleMatches.length;
+
   return (
     <div className="space-y-4">
       {matches.length === 0 && (
@@ -731,7 +740,7 @@ function MatchSection({
           {emptyMessage ?? '0 matching opportunities found.'}
         </p>
       )}
-      {matches.map((match) => (
+      {visibleMatches.map((match) => (
         <MatchCard
           key={match.opportunityId}
           match={match}
@@ -742,12 +751,30 @@ function MatchSection({
           onMatchActivityChanged={onMatchActivityChanged}
         />
       ))}
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + MATCHES_PER_BATCH)}
+          className="w-full rounded-3xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+        >
+          Show {Math.min(remaining, MATCHES_PER_BATCH)} more ({remaining} left)
+        </button>
+      )}
     </div>
   );
 }
 
-type MatchTab = 'Ausbildung' | 'University' | 'Work';
-const MATCH_TABS: MatchTab[] = ['Ausbildung', 'University', 'Work'];
+// 'Work' removed as a tab entirely (found live 2026-11-09) — it always
+// showed a bare "Work (0)" with no backing data or matching logic at all
+// (Opportunity's own path type doesn't even have an Employment value),
+// which read as "no listings right now" rather than "this doesn't exist
+// yet," and on mobile it was also the tab most likely to collide with the
+// floating contact button (see that fix above). Jobs/employment matching
+// is explicitly out of scope for now per CLAUDE.md — re-add a real tab if
+// and when that ever changes, rather than keeping a permanently-empty one
+// around as a placeholder.
+type MatchTab = 'Ausbildung' | 'University';
+const MATCH_TABS: MatchTab[] = ['Ausbildung', 'University'];
 
 // Tab navigation between the three sections (added 2026-09-09, on top of
 // the same-day sectioning above) — with a real Ausbildung batch running
@@ -1036,7 +1063,9 @@ function MatchesPageContent() {
                 <>
                   <GermanyMatchesMap stateBreakdown={state.stateBreakdown} />
                   <div className="mt-4">
-                    <CollapsibleSection title="Upgrade options">
+                    {/* Collapsed by default — same fix and reasoning as the
+                      non-Free branch above. */}
+                    <CollapsibleSection title="Upgrade options" defaultOpen={false}>
                       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                         <TierUpgradeOptions
                           effectiveTier={state.effectiveTier}
@@ -1052,7 +1081,6 @@ function MatchesPageContent() {
                       counts={{
                         Ausbildung: state.pathBreakdown.find((p) => p.path === 'Ausbildung')?.count ?? 0,
                         University: state.pathBreakdown.find((p) => p.path === 'University')?.count ?? 0,
-                        Work: 0,
                       }}
                     />
                   </div>
@@ -1102,7 +1130,13 @@ function MatchesPageContent() {
               </div>
 
               <div className="mb-6">
-                <CollapsibleSection title="Upgrade options">
+                {/* Collapsed by default (found live 2026-11-09, same
+                  reasoning as /account's own copy of this section) —
+                  upsell content open by default pushed the path tabs
+                  below far enough on mobile to land under the floating
+                  contact button, which actually swallowed taps meant for
+                  the rightmost tab. */}
+                <CollapsibleSection title="Upgrade options" defaultOpen={false}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
                     <TierUpgradeOptions effectiveTier={state.effectiveTier} />
                     <Tier3RequestCard effectiveTier={state.effectiveTier} compact />
@@ -1115,7 +1149,6 @@ function MatchesPageContent() {
                   counts={{
                     Ausbildung: state.matches.filter((match) => match.path === 'Ausbildung').length,
                     University: state.matches.filter((match) => match.path === 'University').length,
-                    Work: 0,
                   }}
                 />
                 <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
@@ -1137,6 +1170,7 @@ function MatchesPageContent() {
               <div className="mt-6">
                 {activeTab === 'Ausbildung' && (
                   <MatchSection
+                    key={statusFilter}
                     matches={filterAndSortMatches(
                       state.matches.filter((match) => match.path === 'Ausbildung'),
                       statusFilter,
@@ -1157,6 +1191,7 @@ function MatchesPageContent() {
                 )}
                 {activeTab === 'University' && (
                   <MatchSection
+                    key={statusFilter}
                     matches={filterAndSortMatches(
                       state.matches.filter((match) => match.path === 'University'),
                       statusFilter,
@@ -1168,17 +1203,6 @@ function MatchesPageContent() {
                         ? cvRequestedEmptyMessage()
                         : 'No matching university opportunities yet — check back soon as more real opportunities are added.'
                     }
-                    effectiveTier={state.effectiveTier}
-                    cvRequestsByOpportunity={cvRequestsByOpportunity}
-                    onCvRequested={handleCvRequested}
-                    matchActivityByOpportunity={matchActivityByOpportunity}
-                    onMatchActivityChanged={handleMatchActivityChanged}
-                  />
-                )}
-                {activeTab === 'Work' && (
-                  <MatchSection
-                    matches={[]}
-                    emptyMessage={null}
                     effectiveTier={state.effectiveTier}
                     cvRequestsByOpportunity={cvRequestsByOpportunity}
                     onCvRequested={handleCvRequested}

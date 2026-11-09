@@ -227,7 +227,7 @@ export function SiteNav() {
         </div>
       </div>
     </header>
-      {signedIn && effectiveTier && (
+      {signedIn && effectiveTier && pathname !== '/account/messages' && (
         <FloatingContactButton
           effectiveTier={effectiveTier}
           hasUnread={hasUnread}

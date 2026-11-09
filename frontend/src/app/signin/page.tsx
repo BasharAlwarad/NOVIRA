@@ -99,9 +99,14 @@ export default function SignInPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    // flex flex-col + flex-1 on the content section (found live 2026-11-09):
+    // without this, a short page like this one left a large empty band
+    // below SiteFooter — body's own global min-height:100vh filled the
+    // rest of the viewport after the footer instead of the footer sitting
+    // at the bottom. This pins it there properly (classic sticky footer).
+    <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <SiteNav />
-      <section className="mx-auto w-full max-w-md px-4 py-20 sm:px-6">
+      <section className="mx-auto w-full max-w-md flex-1 px-4 py-20 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
           Sign in or sign up
         </p>

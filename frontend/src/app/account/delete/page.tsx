@@ -45,9 +45,9 @@ export default function DeleteAccountPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <SiteNav />
-      <section className="mx-auto w-full max-w-lg px-4 py-16 sm:px-6">
+      <section className="mx-auto w-full max-w-lg flex-1 px-4 py-16 sm:px-6">
         <Link href="/account" className="text-xs font-medium text-slate-400 hover:text-slate-600">
           ← Back to your account
         </Link>

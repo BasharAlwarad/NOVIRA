@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface StepIndicatorProps {
   currentStepIndex: number;
@@ -14,6 +14,28 @@ export function StepIndicator({
   onStepSelect,
 }: StepIndicatorProps) {
   const activeTileRef = useRef<HTMLLIElement | null>(null);
+  const listRef = useRef<HTMLOListElement | null>(null);
+  // Same left/right scroll-fade cue as the admin nav strip
+  // (admin/layout.tsx) — found live 2026-11-09 missing here despite this
+  // list having the identical "more steps off-screen" problem (14 steps,
+  // only ~2-3 fit at mobile widths). Auto-centering below softens this
+  // (you usually see a step on either side of the active one) but doesn't
+  // help at step 1 or the last step, where there's nothing to center against.
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const updateFades = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    setShowLeftFade(el.scrollLeft > 4);
+    setShowRightFade(el.scrollWidth - el.scrollLeft - el.clientWidth > 4);
+  }, []);
+
+  useEffect(() => {
+    updateFades();
+    window.addEventListener('resize', updateFades);
+    return () => window.removeEventListener('resize', updateFades);
+  }, [updateFades]);
 
   // Re-centers on the active tile whenever the current step changes — via
   // Next/Previous, a direct tile tap, or the step-jump navigation — so the
@@ -24,11 +46,25 @@ export function StepIndicator({
       inline: 'center',
       block: 'nearest',
     });
-  }, [currentStepIndex]);
+    // The smooth scroll fires its own scroll events as it animates, which
+    // the onScroll handler below already catches — this just covers the
+    // very first render, before any scroll event has fired at all.
+    updateFades();
+  }, [currentStepIndex, updateFades]);
 
   return (
-    <nav aria-label="Assessment steps" className="w-full">
-      <ol className="scrollbar-none flex gap-2 overflow-x-auto scroll-smooth pb-1">
+    <nav aria-label="Assessment steps" className="relative w-full">
+      {showLeftFade && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white to-transparent"
+        />
+      )}
+      <ol
+        ref={listRef}
+        onScroll={updateFades}
+        className="scrollbar-none flex gap-2 overflow-x-auto scroll-smooth pb-1"
+      >
         {steps.map((step, index) => {
           const isActive = index === currentStepIndex;
           const isCompleted = index < currentStepIndex;
@@ -76,6 +112,12 @@ export function StepIndicator({
           );
         })}
       </ol>
+      {showRightFade && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-white to-transparent"
+        />
+      )}
     </nav>
   );
 }

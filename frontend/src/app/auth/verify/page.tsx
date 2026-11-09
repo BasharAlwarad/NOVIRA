@@ -17,9 +17,9 @@ export default function AuthVerifyPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-slate-50 text-slate-900">
+        <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
           <SiteNav />
-          <section className="mx-auto w-full max-w-lg px-4 py-24 text-center sm:px-6">
+          <section className="mx-auto w-full max-w-lg flex-1 px-4 py-24 text-center sm:px-6">
             <p className="text-sm text-slate-600">Signing you in…</p>
           </section>
           <SiteFooter />
@@ -63,9 +63,9 @@ function AuthVerifyContent() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <SiteNav />
-      <section className="mx-auto w-full max-w-lg px-4 py-24 text-center sm:px-6">
+      <section className="mx-auto w-full max-w-lg flex-1 px-4 py-24 text-center sm:px-6">
         {state === 'verifying' && (
           <p className="text-sm text-slate-600">Signing you in…</p>
         )}

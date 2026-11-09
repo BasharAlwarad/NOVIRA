@@ -122,7 +122,7 @@ export function SearchableSelect({
         ref={listRef}
         id="occupation-field-listbox"
         role="listbox"
-        className="max-h-64 space-y-1 overflow-y-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm shadow-slate-200/50"
+        className="relative max-h-64 space-y-1 overflow-y-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm shadow-slate-200/50"
       >
         {filteredOptions.length === 0 ? (
           <li className="px-4 py-3 text-sm text-slate-500">

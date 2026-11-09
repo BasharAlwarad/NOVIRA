@@ -102,6 +102,17 @@ export default function Tier1PlanPage() {
                 licensed immigration lawyer, not answered in-house.
               </p>
             </section>
+
+            {/* Repeats the hero's CTA down here (found live 2026-11-09,
+              matching /plans/tier-3's existing pattern) — without it, a
+              reader who's scrolled through all four sections has to scroll
+              back up to actually buy. */}
+            <div className="border-t border-slate-100 pt-8 text-center">
+              <p className="text-sm text-slate-600">Ready to see every match?</p>
+              <div className="mt-4">
+                <UnlockButton />
+              </div>
+            </div>
           </div>
         </div>
       </section>

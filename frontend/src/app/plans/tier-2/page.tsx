@@ -18,7 +18,11 @@ import type { EffectiveTier } from '@/lib/contracts/account';
 // already does (tier3-request.tsx) rather than making the whole page a
 // server-side, session-gated route — a signed-out or not-yet-loaded visitor
 // just sees the full, undiscounted price/link, never a broken state.
-function PriceAndUnlockButton() {
+// `variant` added 2026-11-09 so this can also render as the page's bottom
+// CTA (matching /plans/tier-3's existing repeated-CTA pattern) without its
+// price text staying white-on-white against that section's light
+// background — 'hero' (default) keeps the original dark-hero styling.
+function PriceAndUnlockButton({ variant = 'hero' }: { variant?: 'hero' | 'footer' }) {
   const [effectiveTier, setEffectiveTier] = useState<EffectiveTier>('Free');
 
   useEffect(() => {
@@ -35,7 +39,9 @@ function PriceAndUnlockButton() {
 
   return (
     <>
-      <p className="mt-2 text-xl font-semibold text-slate-100">€{priceEur}</p>
+      <p className={`mt-2 text-xl font-semibold ${variant === 'hero' ? 'text-slate-100' : 'text-slate-600'}`}>
+        €{priceEur}
+      </p>
       <div className="mt-6">
         {isTier2PurchaseEnabled() ? (
           <a
@@ -133,6 +139,14 @@ export default function Tier2PlanPage() {
                 questions go to a licensed immigration lawyer.
               </p>
             </section>
+
+            {/* Repeats the hero's CTA down here (found live 2026-11-09,
+              matching /plans/tier-3's existing pattern) — same reasoning as
+              /plans/tier-1's own copy of this block. */}
+            <div className="border-t border-slate-100 pt-8 text-center">
+              <p className="text-sm text-slate-600">Ready to get started?</p>
+              <PriceAndUnlockButton variant="footer" />
+            </div>
           </div>
         </div>
       </section>

@@ -205,7 +205,14 @@ public static class IntakeEndpoints
 
             if (profile?.PhotoBlobName is null)
             {
-                return Results.NotFound();
+                // 204, not 404 — having no photo yet is the expected steady
+                // state for most users, not an error condition. A 404 here
+                // was semantically defensible but logged as a red error in
+                // every browser's console/network panel on every page load
+                // that checks for a photo, purely cosmetic noise with no
+                // functional difference (the frontend already treated it as
+                // "no photo" either way).
+                return Results.NoContent();
             }
 
             var sasUri = storage.GenerateReadSasUri(profile.PhotoBlobName);

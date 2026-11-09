@@ -180,7 +180,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {showLeftFade && (
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-white to-transparent"
+                    className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white to-transparent"
                   />
                 )}
                 <nav
@@ -242,7 +242,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {showRightFade && (
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-white to-transparent"
+                    className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-white to-transparent"
                   />
                 )}
               </div>
@@ -250,7 +250,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 type="button"
                 onClick={clearAdminKey}
                 aria-label="Log out of admin"
-                className="ml-1 shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 sm:ml-4 sm:rounded-none sm:p-0 sm:text-xs sm:font-medium sm:underline-offset-2 sm:hover:bg-transparent sm:hover:underline"
+                className="ml-2 shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 sm:ml-4 sm:rounded-none sm:p-0 sm:text-xs sm:font-medium sm:underline-offset-2 sm:hover:bg-transparent sm:hover:underline"
               >
                 <LogOut className="h-4 w-4 sm:hidden" aria-hidden="true" />
                 <span className="hidden sm:inline">Log out of admin</span>

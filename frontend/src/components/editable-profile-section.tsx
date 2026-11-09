@@ -19,6 +19,7 @@ import {
   type AssessmentQuestionDefinition,
   type AssessmentQuestionId,
 } from '@/types/assessment';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { SearchableSelect } from '@/components/assessment/SearchableSelect';
 import type { SearchableSelectOption } from '@/components/assessment/SearchableSelect';
 import type { Account } from '@/lib/contracts/account';
@@ -262,23 +263,22 @@ const STATUS_LABELS: Record<IntakeStatus, string> = {
   Submitted: 'Submitted for review',
 };
 
+// No title/h2 here (round 22) — this now renders inside CollapsibleSection's
+// own body, which already owns the title (plus an entry-count teaser as its
+// description, visible even collapsed). Keeping a second h2 here read as the
+// section name appearing twice.
 function RepeatableSectionHeader({
-  title,
   description,
   onAdd,
   addLabel,
 }: {
-  title: string;
   description: string;
   onAdd: () => void;
   addLabel: string;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <p className="mt-1 text-xs text-slate-500">{description}</p>
-      </div>
+      <p className="text-xs text-slate-500">{description}</p>
       <button
         type="button"
         onClick={onAdd}
@@ -962,9 +962,21 @@ export function EditableProfileSection({ account }: { account: Account }) {
         />
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5">
+      {/* These four collapse by default now (found live 2026-11-09) — with
+        the profile fields, CV form, documents, and messages all on one
+        page since round 16, the fully-expanded version of this page ran
+        to roughly 5000px. Each still shows a count/status teaser in its
+        collapsed header so there's a reason to open it without guessing. */}
+      <CollapsibleSection
+        title="Experience"
+        description={
+          form.experience.length === 0
+            ? 'Nothing added yet'
+            : `${form.experience.length} ${form.experience.length === 1 ? 'entry' : 'entries'} added`
+        }
+        defaultOpen={false}
+      >
         <RepeatableSectionHeader
-          title="Experience"
           description="Internships, part-time jobs, volunteer work, or school projects count — not just formal employment."
           addLabel="+ Add experience"
           onAdd={() => setForm({ ...form, experience: [...form.experience, emptyExperience()] })}
@@ -988,11 +1000,18 @@ export function EditableProfileSection({ account }: { account: Account }) {
             />
           ))}
         </div>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5">
+      <CollapsibleSection
+        title="Education"
+        description={
+          form.education.length === 0
+            ? 'Nothing added yet'
+            : `${form.education.length} ${form.education.length === 1 ? 'entry' : 'entries'} added`
+        }
+        defaultOpen={false}
+      >
         <RepeatableSectionHeader
-          title="Education"
           description="School, vocational training, and university — newest first is fine, we'll order it correctly."
           addLabel="+ Add education"
           onAdd={() => setForm({ ...form, education: [...form.education, emptyEducation()] })}
@@ -1016,11 +1035,18 @@ export function EditableProfileSection({ account }: { account: Account }) {
             />
           ))}
         </div>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Skills &amp; certifications</h2>
-        <div className="mt-3 space-y-3">
+      <CollapsibleSection
+        title="Skills & certifications"
+        description={
+          form.technicalSkills || form.certifications || form.drivingLicence
+            ? 'Some details added'
+            : 'Nothing added yet'
+        }
+        defaultOpen={false}
+      >
+        <div className="space-y-3">
           <div>
             <label className={labelClass}>Technical / software skills</label>
             <input
@@ -1049,11 +1075,14 @@ export function EditableProfileSection({ account }: { account: Account }) {
             I have a driving licence
           </label>
         </div>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Hobbies &amp; interests</h2>
-        <p className="mt-1 text-xs text-slate-500">
+      <CollapsibleSection
+        title="Hobbies & interests"
+        description={form.hobbies ? 'Added' : 'Optional — nothing added yet'}
+        defaultOpen={false}
+      >
+        <p className="text-xs text-slate-500">
           Entirely optional — only include something if it&apos;s genuinely relevant.
         </p>
         <textarea
@@ -1062,7 +1091,7 @@ export function EditableProfileSection({ account }: { account: Account }) {
           rows={2}
           className={`mt-3 ${inputClass}`}
         />
-      </section>
+      </CollapsibleSection>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-center gap-3">
