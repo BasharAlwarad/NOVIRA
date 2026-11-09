@@ -163,9 +163,11 @@ function ProfileField({
       )}
       {verifiedInfo && verifiedInfo.diverges && (
         <p className="mt-1 text-xs font-semibold text-amber-700">
-          {verifiedInfo.affectsMatching
-            ? `An approved document confirmed "${verifiedInfo.label}" — matching still uses that, not what you just entered here. If this is a deliberate change, let us know via Messages so we can take a look.`
-            : `An approved document confirmed "${verifiedInfo.label}" — this doesn't affect matching, just shown for reference.`}
+          {verifiedInfo.affectsMatching && !verifiedInfo.canUpdateViaNewDocument
+            ? `An approved document confirmed "${verifiedInfo.label}" — matching still uses that, not what you just entered here. If this is a deliberate change (a different path you're now pursuing), let us know via Messages so we can take a look.`
+            : verifiedInfo.affectsMatching
+              ? `An approved document confirmed "${verifiedInfo.label}" — matching still uses that, not what you just entered here. If you've genuinely improved since (e.g. a new certificate or a finished qualification), upload the updated document and we'll update this once it's approved.`
+              : `An approved document confirmed "${verifiedInfo.label}" — this doesn't affect matching, just shown for reference. If it's changed since (e.g. a renewed passport), upload the updated document to keep this current.`}
         </p>
       )}
     </div>
@@ -181,10 +183,24 @@ function ProfileField({
 // results kept using the old verified value with no explanation anywhere.
 // passportStatus is verifiable too but isn't read by matching at all, so
 // its divergence note is informational only (affectsMatching: false).
+//
+// canUpdateViaNewDocument (added 2026-11-09, after thinking through where
+// this app's data-verification design should and shouldn't lock a field —
+// see the conversation this came out of) splits the verifiable fields into
+// two different kinds: highestEducation/germanLevel/englishLevel/
+// passportStatus are facts a document can legitimately supersede (someone
+// finishes a degree, re-tests into a higher level, renews a passport) —
+// the real fix for those is a new document, which RecomputeVerifiedData
+// already picks up automatically once approved, no extra code needed.
+// occupationField is different in kind: it's a declared choice of path,
+// not a fact a document corrects, so a career pivot away from a verified
+// degree is never "fixed" by uploading something — it just needs a human
+// to notice the change was deliberate.
 interface VerifiedFieldInfo {
   label: string;
   diverges: boolean;
   affectsMatching: boolean;
+  canUpdateViaNewDocument: boolean;
 }
 
 // Backend enums arrive as PascalCase member names (JsonStringEnumConverter)
@@ -724,7 +740,10 @@ export function EditableProfileSection({ account }: { account: Account }) {
     // MatchingService.cs prefers the verified value over self-report for
     // these four; passportStatus is verifiable but never read by matching.
     const affectsMatching = questionId !== 'passportStatus';
-    return { label, diverges, affectsMatching };
+    // Everything except occupationField is a fact a new document can
+    // legitimately update — see this interface's own comment above.
+    const canUpdateViaNewDocument = questionId !== 'occupationField';
+    return { label, diverges, affectsMatching, canUpdateViaNewDocument };
   }
 
   if (loadState.status === 'loading') {
