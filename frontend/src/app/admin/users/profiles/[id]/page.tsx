@@ -7,6 +7,7 @@ import {
   AdminUnauthorizedError,
   deleteUser,
   getUserDetail,
+  markProfileReviewed,
   recomputeVerifiedData,
   reviewDocument,
   sendMessageToUser,
@@ -654,9 +655,15 @@ const TIER_LABELS: Record<string, string> = {
 function PurchasesSection({
   effectiveTier,
   purchases,
+  hasUnreviewedPurchase,
+  onMarkReviewed,
+  markingReviewed,
 }: {
   effectiveTier: string;
   purchases: AdminPurchase[];
+  hasUnreviewedPurchase: boolean;
+  onMarkReviewed: () => void;
+  markingReviewed: boolean;
 }) {
   return (
     <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
@@ -670,6 +677,27 @@ function PurchasesSection({
           {TIER_LABELS[effectiveTier] ?? effectiveTier}
         </span>
       </div>
+
+      {/* The real trigger for "check this person's answers for mistakes"
+        (tier-journey study, 2026-11-12) — previously an unwritten intention
+        with nothing that actually surfaced it. One action covers every
+        currently-unreviewed purchase, regardless of which tier(s). */}
+      {hasUnreviewedPurchase && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
+          <p className="text-xs text-amber-800">
+            A purchase on this account hasn&apos;t been reviewed yet — check their profile answers
+            for mistakes.
+          </p>
+          <button
+            type="button"
+            onClick={onMarkReviewed}
+            disabled={markingReviewed}
+            className="shrink-0 rounded-full bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {markingReviewed ? 'Marking…' : 'Mark profile reviewed'}
+          </button>
+        </div>
+      )}
 
       {purchases.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">No purchases yet.</p>
@@ -689,15 +717,22 @@ function PurchasesSection({
                   {purchase.refundedAt ? ` · Refunded ${formatDateTime(purchase.refundedAt)}` : ''}
                 </p>
               </div>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  purchase.status === 'Refunded'
-                    ? 'bg-slate-100 text-slate-600'
-                    : 'bg-emerald-50 text-emerald-700'
-                }`}
-              >
-                {purchase.status}
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                {purchase.reviewedAt === null && (
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    Not reviewed
+                  </span>
+                )}
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    purchase.status === 'Refunded'
+                      ? 'bg-slate-100 text-slate-600'
+                      : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  {purchase.status}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -724,11 +759,13 @@ function UserDetailTabs({
   onChange,
   documentCount,
   pendingDocumentCount,
+  unreviewedPurchaseCount,
 }: {
   tab: DetailTab;
   onChange: (tab: DetailTab) => void;
   documentCount: number;
   pendingDocumentCount: number;
+  unreviewedPurchaseCount: number;
 }) {
   const tabs: { key: DetailTab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
@@ -760,6 +797,18 @@ function UserDetailTabs({
                 {pendingDocumentCount}
               </span>
             )}
+            {/* Same badge pattern as Documents above, for the same kind of
+              signal — a purchase on this account (any tier) hasn't been
+              reviewed yet. Lives on Overview since that's where "Plan &
+              payments" (and the real "Mark profile reviewed" action) is. */}
+            {key === 'overview' && unreviewedPurchaseCount > 0 && (
+              <span
+                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white"
+                aria-label={`${unreviewedPurchaseCount} unreviewed purchase`}
+              >
+                {unreviewedPurchaseCount}
+              </span>
+            )}
           </button>
         );
       })}
@@ -777,6 +826,7 @@ export default function AdminUserProfilePage() {
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recomputing, setRecomputing] = useState(false);
+  const [markingReviewed, setMarkingReviewed] = useState(false);
   const [tab, setTab] = useState<DetailTab>('overview');
 
   const loadUser = useCallback(async () => {
@@ -855,6 +905,22 @@ export default function AdminUserProfilePage() {
       setError('Failed to recompute verified data — try again.');
     } finally {
       setRecomputing(false);
+    }
+  };
+
+  // The real trigger behind HasUnreviewedPurchase (tier-journey study,
+  // 2026-11-12) — marks every currently-unreviewed purchase on this
+  // account reviewed at once, same "I looked at this person, I'm caught
+  // up" semantics as the backend endpoint's own comment.
+  const handleMarkReviewed = async () => {
+    setMarkingReviewed(true);
+    try {
+      const updated = await markProfileReviewed(adminKey, userId);
+      setUser(updated);
+    } catch {
+      setError('Failed to mark this profile reviewed — try again.');
+    } finally {
+      setMarkingReviewed(false);
     }
   };
 
@@ -941,6 +1007,7 @@ export default function AdminUserProfilePage() {
             onChange={setTab}
             documentCount={user.documents.length}
             pendingDocumentCount={user.documents.filter((d) => d.reviewStatus === 'PendingReview').length}
+            unreviewedPurchaseCount={user.purchases.filter((p) => p.reviewedAt === null).length}
           />
         </div>
 
@@ -1036,7 +1103,13 @@ export default function AdminUserProfilePage() {
               );
             })()}
 
-            <PurchasesSection effectiveTier={user.effectiveTier} purchases={user.purchases} />
+            <PurchasesSection
+              effectiveTier={user.effectiveTier}
+              purchases={user.purchases}
+              hasUnreviewedPurchase={user.hasUnreviewedPurchase}
+              onMarkReviewed={handleMarkReviewed}
+              markingReviewed={markingReviewed}
+            />
 
             <DataConsistencySection user={user} />
           </>

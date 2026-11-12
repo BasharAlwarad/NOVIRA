@@ -95,6 +95,18 @@ export async function recomputeVerifiedData(adminKey: string, userId: string): P
   return (await response.json()) as AdminUserDetail;
 }
 
+export async function markProfileReviewed(adminKey: string, userId: string): Promise<AdminUserDetail> {
+  const response = await adminFetch(`/api/admin/users/${userId}/mark-profile-reviewed`, adminKey, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to mark this profile reviewed.');
+  }
+
+  return (await response.json()) as AdminUserDetail;
+}
+
 export async function deleteUser(adminKey: string, userId: string): Promise<void> {
   const response = await adminFetch(`/api/admin/users/${userId}`, adminKey, { method: 'DELETE' });
 

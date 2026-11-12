@@ -429,6 +429,9 @@ namespace Novira.Backend.Migrations
                     b.Property<DateTime?>("RefundedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 

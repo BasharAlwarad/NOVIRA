@@ -53,4 +53,15 @@ public class Purchase
     public PurchaseStatus Status { get; set; } = PurchaseStatus.Paid;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? RefundedAt { get; set; }
+
+    // Added 2026-11-12 (tier-journey study) — the real, tracked trigger for
+    // "a paid purchase happened, someone should check this user's profile
+    // answers for mistakes" that was previously just an unwritten intention
+    // with no mechanism behind it at all (flagged as an open build item in
+    // Monetization-Strategy.md since 2026-09-27). Deliberately per-purchase,
+    // not a single "last reviewed" timestamp on User — a user can buy into
+    // multiple tiers over time, and each new purchase is its own reason to
+    // look again, not something one past review should silently cover
+    // forever. Null means "not yet reviewed by an admin."
+    public DateTime? ReviewedAt { get; set; }
 }

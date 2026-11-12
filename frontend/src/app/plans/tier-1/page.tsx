@@ -61,7 +61,10 @@ export default function Tier1PlanPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-                  <span>A real human review of your profile — a person actually looks, not just the matching algorithm.</span>
+                  <span>
+                    Upload your documents — passport, certificates, anything relevant — each one
+                    checked by AI, then reviewed by a real person on our team.
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
@@ -73,14 +76,14 @@ export default function Tier1PlanPage() {
             <section>
               <h2 className="text-lg font-bold text-slate-900">Why it matters</h2>
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                Self-reported matching has real blind spots. Running your own profile through a form
-                catches the obvious things, but a person on our team reviewing it by hand can catch
-                what an automated match alone might miss — an inconsistency, a detail you
-                under-described, something that changes which programs actually make sense for you.
-                And seeing the complete list matters on its own: program deadlines and availability
-                shift over time, so planning around one visible match instead of all of them means
-                planning with incomplete information. This unlocks everything that&apos;s already been
-                found — not a new search, the real, already-matched list.
+                Self-reported answers get you matched, but they&apos;re still just what you typed
+                into a form. Uploading your real documents lets us actually verify details on your
+                profile instead of only taking your word for it — useful on its own, and the
+                foundation anything you do at a higher tier later builds on. And seeing the complete
+                list matters too: program deadlines and availability shift over time, so planning
+                around one visible match instead of all of them means planning with incomplete
+                information. This unlocks everything that&apos;s already been found — not a new
+                search, the real, already-matched list.
               </p>
             </section>
 
@@ -88,8 +91,9 @@ export default function Tier1PlanPage() {
               <h2 className="text-lg font-bold text-slate-900">How it works</h2>
               <p className="mt-3 text-sm leading-7 text-slate-600">
                 Pay once, and every matching opportunity on your account unlocks immediately — no
-                waiting. Your profile gets a human review alongside the automated matching that&apos;s
-                already run, and any notes from that review show up directly on your matches.
+                waiting. You can also start uploading documents from your account — each one gets
+                checked by AI first, then reviewed by a person on our team, and anything confirmed
+                updates your profile as verified.
               </p>
             </section>
 

@@ -76,9 +76,11 @@ function NoProfileBanner() {
 function DocumentsSection({
   documents,
   onUploaded,
+  effectiveTier,
 }: {
   documents: UserDocumentSummary[] | null;
   onUploaded: () => void;
+  effectiveTier: EffectiveTier;
 }) {
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -126,16 +128,41 @@ function DocumentsSection({
     }
   };
 
+  // Tier1+ gate, added 2026-11-12 (tier-journey study) — document upload
+  // used to be open to every signed-in user including Free, so it couldn't
+  // be described as something Tier 1 buyers get. Gating only the upload
+  // action (not this section's visibility, and not any document a Free
+  // user already uploaded before this gate existed) turns Tier 1 into a
+  // real, honest, quantifiable deliverable: "upload your documents, AI
+  // checks them, then a person on our team does too" — replacing the old
+  // unquantified "a real human review of your profile" marketing line.
+  const canUpload = effectiveTier !== 'Free';
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5">
       <h2 className="text-sm font-semibold text-slate-900">Your documents</h2>
-      <p className="mt-1 text-xs text-slate-500">
-        Self-reported, not yet verified — an AI identifies the document and does a first pass,
-        then a person on our team makes the final call. Add documents one at a time. JPEG, PNG,
-        or PDF, up to 10MB.
-      </p>
+      {canUpload ? (
+        <p className="mt-1 text-xs text-slate-500">
+          Self-reported, not yet verified — an AI identifies the document and does a first pass,
+          then a person on our team makes the final call. Add documents one at a time. JPEG, PNG,
+          or PDF, up to 10MB.
+        </p>
+      ) : (
+        <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+          <p className="text-sm text-slate-700">
+            Uploading documents is a Tier 1 feature — each one gets checked by AI, then reviewed
+            by a real person on our team.
+          </p>
+          <Link
+            href="/plans/tier-1"
+            className="mt-2 inline-flex text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+          >
+            See what Tier 1 unlocks →
+          </Link>
+        </div>
+      )}
 
-      {correcting && (
+      {canUpload && correcting && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
           <span>
             Uploading a corrected version of <strong>{correcting.name}</strong>.
@@ -150,35 +177,39 @@ function DocumentsSection({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-3">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Name this document (e.g. My passport)"
-          maxLength={200}
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
-        />
-        <input
-          type="file"
-          accept="image/jpeg,image/png,application/pdf"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 file:mr-3 file:rounded-full file:border-0 file:bg-emerald-400 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-950"
-        />
-        <button
-          type="submit"
-          disabled={!file || !name.trim() || submitting}
-          // Explicit disabled colors instead of opacity-50 — opacity faded
-          // both the emerald bg and near-black text toward white together,
-          // landing around 3:1 contrast (fails WCAG AA's 4.5:1 for this
-          // text size). slate-200/slate-600 reads clearly as inactive
-          // while staying legible (~5:1).
-          className="w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600"
-        >
-          {submitting ? 'Uploading…' : 'Upload document'}
-        </button>
-      </form>
-      {message && <p className="mt-2 text-xs text-slate-500">{message}</p>}
+      {canUpload && (
+        <>
+          <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-3">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name this document (e.g. My passport)"
+              maxLength={200}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100"
+            />
+            <input
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 file:mr-3 file:rounded-full file:border-0 file:bg-emerald-400 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-950"
+            />
+            <button
+              type="submit"
+              disabled={!file || !name.trim() || submitting}
+              // Explicit disabled colors instead of opacity-50 — opacity faded
+              // both the emerald bg and near-black text toward white together,
+              // landing around 3:1 contrast (fails WCAG AA's 4.5:1 for this
+              // text size). slate-200/slate-600 reads clearly as inactive
+              // while staying legible (~5:1).
+              className="w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-600"
+            >
+              {submitting ? 'Uploading…' : 'Upload document'}
+            </button>
+          </form>
+          {message && <p className="mt-2 text-xs text-slate-500">{message}</p>}
+        </>
+      )}
 
       <div className="mt-4 space-y-3">
         {documents === null ? (
@@ -202,7 +233,7 @@ function DocumentsSection({
               {doc.reviewNote && doc.reviewStatus !== 'Approved' && (
                 <p className="mt-2 text-xs text-slate-500">{doc.reviewNote}</p>
               )}
-              {doc.reviewStatus === 'Denied' && (
+              {doc.reviewStatus === 'Denied' && canUpload && (
                 <button
                   type="button"
                   onClick={() => startCorrection(doc)}
@@ -547,7 +578,11 @@ export default function AccountPage() {
               {!state.account.profileUpdatedAt && <NoProfileBanner />}
               <PlanSection effectiveTier={state.account.effectiveTier} />
               <EditableProfileSection account={state.account} />
-              <DocumentsSection documents={documents} onUploaded={loadDocuments} />
+              <DocumentsSection
+                documents={documents}
+                onUploaded={loadDocuments}
+                effectiveTier={state.account.effectiveTier}
+              />
               <MessagesTeaser effectiveTier={state.account.effectiveTier} />
             </>
           )}

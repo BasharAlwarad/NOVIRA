@@ -31,7 +31,13 @@ public record AdminUserListItem(
     // see AccountEndpoints.cs. Lets the founder see (and, via the reason,
     // understand) a pending departure before it's actually gone.
     DateTime? DeletionScheduledFor,
-    string? DeletionReason);
+    string? DeletionReason,
+    // True when this user has at least one Purchase with Purchase.ReviewedAt
+    // still null — see that field's own comment. Surfaced as a filterable
+    // "New purchase" attention flag on /admin/users/profiles, same pattern
+    // as PendingDocumentCount's own "Needs review" flag, but a distinct
+    // signal: this is about checking the user's *answers*, not a document.
+    bool HasUnreviewedPurchase);
 
 public record AdminPurchaseResponse(
     Guid Id,
@@ -39,7 +45,8 @@ public record AdminPurchaseResponse(
     int AmountEur,
     string Status,
     DateTime CreatedAt,
-    DateTime? RefundedAt);
+    DateTime? RefundedAt,
+    DateTime? ReviewedAt);
 
 public record AdminDocumentResponse(
     Guid Id,
@@ -144,7 +151,8 @@ public record AdminUserDetailResponse(
     // actually turn into action, not just which ones were computed as a fit.
     List<AdminAppliedMatchResponse> AppliedMatches,
     DateTime? DeletionScheduledFor,
-    string? DeletionReason);
+    string? DeletionReason,
+    bool HasUnreviewedPurchase);
 
 public record AdminAppliedMatchResponse(
     Guid OpportunityId, string OpportunityTitle, string OpportunityProvider, DateTime AppliedAt);
@@ -217,7 +225,8 @@ public static class DocumentsAdminEndpoints
                     u.Id, u.Email, u.FullName, u.VerifiedFullName, u.FraudFlagged,
                     pendingCounts.GetValueOrDefault(u.Id, 0), u.CreatedAt,
                     EffectiveTierCalculator.Compute(purchasesByUser.GetValueOrDefault(u.Id, [])).ToString(),
-                    u.DeletionScheduledFor, u.DeletionReason))
+                    u.DeletionScheduledFor, u.DeletionReason,
+                    purchasesByUser.GetValueOrDefault(u.Id, []).Any(p => p.ReviewedAt is null)))
                 .OrderByDescending(u => u.PendingDocumentCount > 0)
                 .ThenByDescending(u => u.PendingDocumentCount)
                 .ThenByDescending(u => u.CreatedAt)
@@ -240,6 +249,40 @@ public static class DocumentsAdminEndpoints
                 .ToListAsync();
             var messages = await LoadMessagesAsync(db, id);
             var purchases = await LoadPurchasesAsync(db, id);
+            var intake = await LoadIntakeProfileAsync(db, id);
+            var appliedMatches = await LoadAppliedMatchesAsync(db, id);
+
+            return Results.Ok(ToAdminUserDetailResponse(user, documents, messages, purchases, storage, intake, appliedMatches));
+        });
+
+        // The real trigger behind HasUnreviewedPurchase above — one action
+        // marks every currently-unreviewed purchase on this account as
+        // reviewed at once (not per-purchase), matching "I looked at this
+        // person's current profile, I'm caught up" rather than requiring a
+        // separate click per tier they've bought into. Deliberately doesn't
+        // touch anything else about the user — this is purely the review
+        // acknowledgment, same narrow scope as a document's own ReviewedAt.
+        group.MapPost("/{id:guid}/mark-profile-reviewed", async (Guid id, AppDbContext db, AzureBlobStorageService storage) =>
+        {
+            var user = await db.Users.FindAsync(id);
+            if (user is null)
+            {
+                return Results.NotFound();
+            }
+
+            var purchases = await db.Purchases.Where(p => p.UserId == id).ToListAsync();
+            var now = DateTime.UtcNow;
+            foreach (var purchase in purchases.Where(p => p.ReviewedAt is null))
+            {
+                purchase.ReviewedAt = now;
+            }
+            await db.SaveChangesAsync();
+
+            var documents = await db.UserDocuments
+                .Where(d => d.UserId == id)
+                .OrderByDescending(d => d.UploadedAt)
+                .ToListAsync();
+            var messages = await LoadMessagesAsync(db, id);
             var intake = await LoadIntakeProfileAsync(db, id);
             var appliedMatches = await LoadAppliedMatchesAsync(db, id);
 
@@ -448,12 +491,13 @@ public static class DocumentsAdminEndpoints
             user.VerifiedOccupationField, user.VerifiedHasCertifiedLanguageProof, user.VerifiedDataUpdatedAt,
             EffectiveTierCalculator.Compute(purchases).ToString(),
             purchases.Select(p => new AdminPurchaseResponse(
-                p.Id, p.Tier.ToString(), p.AmountEur, p.Status.ToString(), p.CreatedAt, p.RefundedAt)).ToList(),
+                p.Id, p.Tier.ToString(), p.AmountEur, p.Status.ToString(), p.CreatedAt, p.RefundedAt, p.ReviewedAt)).ToList(),
             documents.Select(d => ToAdminDocumentResponse(d, storage, documents)).ToList(),
             messages.Select(MessagesEndpoints.ToResponse).ToList(),
             intake is null ? null : IntakeEndpoints.ToResponse(intake),
             appliedMatches,
-            user.DeletionScheduledFor, user.DeletionReason);
+            user.DeletionScheduledFor, user.DeletionReason,
+            purchases.Any(p => p.ReviewedAt is null));
 
     private static Task<List<Message>> LoadMessagesAsync(AppDbContext db, Guid userId) =>
         db.Messages.Where(m => m.UserId == userId).OrderByDescending(m => m.CreatedAt).ToListAsync();

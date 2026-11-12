@@ -85,9 +85,17 @@ const TIER_FILTERS: TierFilter[] = ['All', 'Free', 'Tier1', 'Tier2', 'Tier3'];
 // Each is cheap to compute from fields the list endpoint already returns
 // (or, for hasNewReply, already has live client-side via the admin layout's
 // SignalR connection) — no backend change needed.
-type AttentionFlag = 'needsReview' | 'flagged' | 'pendingDeletion' | 'newMessage' | 'verified';
+type AttentionFlag = 'needsReview' | 'newPurchase' | 'flagged' | 'pendingDeletion' | 'newMessage' | 'verified';
 const ATTENTION_FLAGS: { key: AttentionFlag; label: string }[] = [
   { key: 'needsReview', label: 'Needs review' },
+  // Distinct from 'needsReview' above (found live 2026-11-12, tier-journey
+  // study) — that one is about an uploaded document; this is "a paid
+  // purchase happened, go check this person's profile answers," which
+  // previously had no real trigger at all. Kept separate rather than
+  // folded in, same reasoning as not bundling Tier3RequestCard into
+  // TierUpgradeOptions earlier this session: two different concerns
+  // shouldn't share one flag just because they're both "needs a look."
+  { key: 'newPurchase', label: 'New purchase' },
   { key: 'flagged', label: 'Flagged' },
   { key: 'pendingDeletion', label: 'Pending deletion' },
   { key: 'newMessage', label: 'New message' },
@@ -102,6 +110,8 @@ function matchesFlag(
   switch (flag) {
     case 'needsReview':
       return user.pendingDocumentCount > 0;
+    case 'newPurchase':
+      return user.hasUnreviewedPurchase;
     case 'flagged':
       return user.fraudFlagged;
     case 'pendingDeletion':

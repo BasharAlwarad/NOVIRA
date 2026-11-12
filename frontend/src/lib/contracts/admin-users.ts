@@ -22,6 +22,11 @@ export interface AdminUserListItem {
   // backend/Endpoints/AccountEndpoints.cs.
   deletionScheduledFor: string | null;
   deletionReason: string | null;
+  // True when this user has at least one Purchase with reviewedAt still
+  // null (see Purchase.cs's own comment) — the real, tracked "go check this
+  // person's profile answers" trigger added 2026-11-12, for every tier, not
+  // just Tier 1.
+  hasUnreviewedPurchase: boolean;
 }
 
 // Mirrors backend/Endpoints/DocumentsAdminEndpoints.cs's AdminPurchaseResponse —
@@ -33,6 +38,7 @@ export interface AdminPurchase {
   status: 'Paid' | 'Refunded';
   createdAt: string;
   refundedAt: string | null;
+  reviewedAt: string | null;
 }
 
 export interface AdminDocument {
@@ -106,6 +112,7 @@ export interface AdminUserDetail extends ProfileSnapshot, VerifiedProfile {
   appliedMatches: AdminAppliedMatch[];
   deletionScheduledFor: string | null;
   deletionReason: string | null;
+  hasUnreviewedPurchase: boolean;
 }
 
 export interface AdminAppliedMatch {
