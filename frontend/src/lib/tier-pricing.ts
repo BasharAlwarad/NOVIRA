@@ -10,8 +10,8 @@ import type { EffectiveTier } from '@/lib/contracts/account';
 const TIER1_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER1_PAYMENT_LINK ?? '';
 const TIER2_PAYMENT_LINK = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK ?? '';
 
-// Tier2's one carry-up scenario (round 6) — a user who already paid Tier1's
-// €30 pays €120, not €150, mirroring Tier3's carry-up pattern below but
+// Tier2's one carry-up scenario (round 6) — a user who already paid Tier1
+// pays the Tier1 credit less, not the full Tier2 price, mirroring Tier3's carry-up pattern below but
 // simpler (only one credit source exists below Tier2, so one extra link is
 // enough — see backend/Services/Tier2PricingCalculator.cs for the matching
 // server-side amount, which is what actually gets verified). Empty until
@@ -27,8 +27,15 @@ const TIER2_PAYMENT_LINK_FROM_TIER1 = process.env.NEXT_PUBLIC_TIER2_PAYMENT_LINK
 // mismatch here is a copy bug, not a billing bug, but still worth keeping
 // honest. See TierPricing.cs for why this isn't shared code across the
 // frontend/backend boundary.
-export const TIER1_PRICE_EUR = 30;
-export const TIER2_PRICE_EUR = 150;
+// Cut 2026-11-12 (Monetization-Strategy.md §4.2c) — deliberately low,
+// early-stage prices to build volume/trust toward the higher tiers. Must
+// stay in sync with backend/Services/TierPricing.cs (and
+// Tier2PricingCalculator.cs/Tier3PricingCalculator.cs's carry-up credit
+// constants) and whatever each Stripe Payment Link actually charges — see
+// CLAUDE.md's pre-deployment blockers for the real Payment Links still
+// needing to be recreated at these amounts.
+export const TIER1_PRICE_EUR = 5;
+export const TIER2_PRICE_EUR = 40;
 
 // Display-only figures for /#services and the request/signing flow's own
 // copy — shown as two separate figures, not one combined total, since

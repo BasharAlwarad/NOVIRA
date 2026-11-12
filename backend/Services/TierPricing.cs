@@ -15,10 +15,16 @@ namespace Novira.Backend.Services;
 // same session-verification flow) once an opportunity is actually secured.
 public static class TierPricing
 {
+    // Tier1/Tier2 cut 2026-11-12 (Monetization-Strategy.md §4.2c) — early-
+    // stage, deliberately low prices to build volume/trust toward the
+    // higher tiers; Tier 3 unchanged, kept at its original amount. Real
+    // Stripe Payment Links still need to be recreated at these new amounts
+    // (founder's own action — see CLAUDE.md's pre-deployment blockers)
+    // before this matches what checkout actually charges.
     private static readonly Dictionary<PurchaseTier, int> AmountsEur = new()
     {
-        [PurchaseTier.Tier1] = 30,
-        [PurchaseTier.Tier2] = 150,
+        [PurchaseTier.Tier1] = 5,
+        [PurchaseTier.Tier2] = 40,
         [PurchaseTier.Tier3] = 500,
     };
 

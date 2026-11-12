@@ -66,24 +66,19 @@ public static class DocumentsEndpoints
             var user = (User)httpContext.Items["CurrentUser"]!;
             var logger = loggerFactory.CreateLogger("Documents");
 
-            // Tier1+ gate, added 2026-11-12 — the tier-journey study found
-            // document upload was open to every signed-in user including
-            // Free, so it couldn't be described as something Tier 1 buyers
-            // get. The founder's explicit call: gate the upload action
-            // itself (not visibility of documents already on the account —
-            // a Free user who uploaded before this gate, if any, keeps
-            // seeing their existing documents via GET above), so Tier 1
-            // becomes a real, honest "upload your documents, AI + a human
-            // checks them" deliverable instead of an unquantified "human
-            // review" marketing line.
-            var purchases = await db.Purchases.Where(p => p.UserId == user.Id).ToListAsync();
-            var effectiveTier = EffectiveTierCalculator.Compute(purchases);
-            if (effectiveTier == EffectiveTier.Free)
-            {
-                return Results.Json(
-                    new { message = "Uploading documents needs Tier 1 or above — unlock your matches to get started." },
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
+            // Deliberately open to every signed-in user, Free tier included
+            // (a brief Tier1+ gate added 2026-11-12 was reverted the same
+            // day — see Monetization-Strategy.md §4.2c). More documents
+            // means better-verified profiles and better matching for
+            // everyone, which is the actual product, not a premium extra;
+            // gating the data-input step itself would work against the
+            // "don't gate basic functionality that shows the product's
+            // value" principle that similar job-matching platforms
+            // (DirectlyApply, Lensa) already follow — they keep resume
+            // upload free and reserve paywalls for scoring/tailoring/action
+            // features instead. Cost is bounded and already accounted for:
+            // MaxDocumentsPerUser below caps the real per-account AI spend
+            // regardless of tier.
 
             // A user with a document already flagged fraudulent is blocked
             // from further self-service uploads until an admin manually

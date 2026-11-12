@@ -13,8 +13,12 @@ namespace Novira.Backend.Services;
 public static class Tier3PricingCalculator
 {
     private const int FullUpfrontEur = 500;
-    private const int Tier1CreditEur = 30;
-    private const int Tier2CreditEur = 150;
+    // Credits mirror Tier1/Tier2's real prices (cut 2026-11-12, see
+    // Monetization-Strategy.md §4.2c) — these must always equal what the
+    // user actually paid at that tier, or the lifetime-total-is-always-
+    // €1,500 invariant this calculator exists to preserve would break.
+    private const int Tier1CreditEur = 5;
+    private const int Tier2CreditEur = 40;
 
     // The second half of Tier3's €1,500 lifetime total — flat, no carry-up
     // (unlike the upfront amount above), since it's charged once regardless

@@ -19,7 +19,8 @@ import type { EffectiveTier } from '@/lib/contracts/account';
 
 // Round 6: this page used to render a static price/link (TIER2_PRICE_EUR,
 // getTier2PaymentLink() with no args) since it was a plain, session-unaware
-// public page. Tier2's new carry-up discount (€120 instead of €150 for a
+// public page. Tier2's new carry-up discount (€35 instead of €40, cut
+// 2026-11-12 — Monetization-Strategy.md §4.2c — for a
 // user who already paid Tier1) needs to know the viewer's effectiveTier, so
 // this block self-fetches the account the same way Tier3RequestCard
 // already does (tier3-request.tsx) rather than making the whole page a
